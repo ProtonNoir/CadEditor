@@ -43,7 +43,7 @@ public class Data
       {0x0646, 0xE}, //GREEN WALKING ENEMY
   };
   
-  public List<ObjectRec> getObjects(int levelNo)
+  public List<ObjectList> getObjects(int levelNo)
   {
     LevelRec lr = ConfigScript.getLevelRec(levelNo);
     int objCount = lr.objCount;
@@ -65,14 +65,15 @@ public class Data
       var obj = new ObjectRec(enemyType, sx, sy, x, y, dataDict);
       objects.Add(obj);
     }
-    return objects;
+    return new List<ObjectList> { new ObjectList { objects = objects, name = "Objects" } };
   }
 
-  public bool setObjects(int levelNo, List<ObjectRec> objects)
+  public bool setObjects(int levelNo, List<ObjectList> objLists)
   {
     LevelRec lr = ConfigScript.getLevelRec(levelNo);
     int objCount = lr.objCount;
     int baseAddr = lr.objectsBeginAddr;
+    var objects = objLists[0].objects;
     for (int i = 0; i < objects.Count; i++)
     {
         var obj = objects[i];
@@ -100,15 +101,15 @@ public class Data
   //not real layout, simple screen line
   public  LevelLayerData getLayout(int curActiveLayout)
   {
-      int width =  Globals.getLevelWidth(curActiveLayout);
-      int height = Globals.getLevelHeight(curActiveLayout);
+      int width =  ConfigScript.getLevelWidth(curActiveLayout);
+      int height = ConfigScript.getLevelHeight(curActiveLayout);
       byte[] layer = new byte[width * height];
       for (int i = 0; i < width * height; i++)
           layer[i] = (byte)i;
       return new LevelLayerData(width, height, layer, null, null);
   }
   
-  public static Dictionary<String,int> getObjectDictionary(int type)
+  public static Dictionary<String,int> getObjectDictionary(int listNo, int type)
   {
     return new Dictionary<String, int> { {"data", 0} };
   }

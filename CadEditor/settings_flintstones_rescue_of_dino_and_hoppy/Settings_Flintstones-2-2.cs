@@ -3,20 +3,44 @@ using System.Collections.Generic;
 //css_include Settings_Flintstones-Utils.cs;
 public class Data
 { 
-  public OffsetRec getScreensOffset()     { return new OffsetRec(0x1519, 1 , 8*78);   }
+  public string[] getPluginNames() 
+  {
+    return new string[] 
+    {
+      "PluginChrView.dll",
+    };
+  }
+  public OffsetRec getScreensOffset()   { return new OffsetRec(0x1519 + 64*8 , 1  , 8*12);   }
+  public OffsetRec getPalOffset()       { return new OffsetRec(0x0    , 1  , 16);     }
+  public OffsetRec getVideoOffset()     { return new OffsetRec(0x3B010, 1  , 0x1000); }
+  public OffsetRec getVideoObjOffset()  { return new OffsetRec(0x20010, 1  , 0x1000); }
+  public OffsetRec getBlocksOffset()    { return new OffsetRec(0x24F9 , 1  , 0x4000); }
+  public OffsetRec getBigBlocksOffset() { return new OffsetRec(0x1779 , 1  , 0x4000); }
   public int getScreenWidth()             { return 8; }
-  public int getScreenHeight()            { return 78; }
+  public int getScreenHeight()            { return 12; }
   public bool getScreenVertical()         { return true; }
-  public string getBlocksFilename()       { return "flintstones_2.png"; }
+  //public string getBlocksFilename()       { return "flintstones_2.png"; }
   
-  public bool isBigBlockEditorEnabled() { return false; }
-  public bool isBlockEditorEnabled()    { return false; }
+  public int getBlocksCount()    { return 179; }
+  public int getBigBlocksCount() { return 216; }
+  
+  public bool isBigBlockEditorEnabled() { return true; }
+  public bool isBlockEditorEnabled()    { return true; }
   public bool isEnemyEditorEnabled()    { return true; }
   
-  public GetObjectsFunc getObjectsFunc()   { return getObjects;  }
-  public SetObjectsFunc setObjectsFunc()   { return setObjects;  }
-  public GetLayoutFunc getLayoutFunc()     { return FliUtils.getLayout;   }
+  public GetVideoPageAddrFunc getVideoPageAddrFunc() { return Utils.getChrAddress; }
+  public GetVideoChunkFunc    getVideoChunkFunc()    { return Utils.getVideoChunk; }
+  public SetVideoChunkFunc    setVideoChunkFunc()    { return Utils.setVideoChunk; }
+  public virtual GetBlocksFunc getBlocksFunc()       { return FliUtils.getBlocks;}
+  public virtual SetBlocksFunc setBlocksFunc()       { return FliUtils.setBlocks;}
+  public virtual GetBigBlocksFunc getBigBlocksFunc() { return FliUtils.getBigBlocks;}
+  public virtual SetBigBlocksFunc setBigBlocksFunc() { return FliUtils.setBigBlocks;}
+  public GetObjectsFunc getObjectsFunc()   { return FliUtils.getObjects;  }
+  public SetObjectsFunc setObjectsFunc()   { return FliUtils.setObjects;  }
+  public GetLayoutFunc getLayoutFunc()     { return FliUtils.getLayoutRom;   } 
   public GetObjectDictionaryFunc getObjectDictionaryFunc() { return FliUtils.getObjectDictionary; }
+  public ConvertScreenTileFunc getConvertScreenTileFunc()     { return FliUtils.getConvertScreenTile; }
+  public ConvertScreenTileFunc getBackConvertScreenTileFunc() { return FliUtils.getBackConvertScreenTile; }
   
   public IList<LevelRec> getLevelRecs() { return levelRecs; }
   public IList<LevelRec> levelRecs = new List<LevelRec>() 
@@ -24,51 +48,15 @@ public class Data
     new LevelRec(0x118CB, 6, 1, 1, 0x0),
   };
   
-  //addrs saved in ram at D7-D9-DC-DC
-  public List<ObjectRec> getObjects(int levelNo)
+  public GetPalFunc           getPalFunc()           { return getPallete;}
+  public SetPalFunc           setPalFunc()           { return null;}
+  
+  public byte[] getPallete(int palId)
   {
-    LevelRec lr = ConfigScript.getLevelRec(levelNo);
-    int objCount = lr.objCount;
-    int baseAddr = lr.objectsBeginAddr;
-    var objects = new List<ObjectRec>();
-    for (int i = 0; i < objCount; i++)
-    {
-      byte x    = Globals.romdata[baseAddr + objCount*0 + i];
-      byte y    = Globals.romdata[baseAddr + objCount*2 + i];
-      int realx = x * 8 + 64*32;
-      int realy = y * 8;
-      byte v    = Globals.romdata[baseAddr + objCount*3 + i];
-      byte data = Globals.romdata[baseAddr + objCount*1 + i];
-      var dataDict = new Dictionary<string,int>();
-      dataDict["data"] = data;
-      var obj = new ObjectRec(v, 0, 0, realx, realy, dataDict);
-      objects.Add(obj);
-    }
-    return objects;
-  }
-
-  public bool setObjects(int levelNo, List<ObjectRec> objects)
-  {
-    LevelRec lr = ConfigScript.getLevelRec(levelNo);
-    int objCount = lr.objCount;
-    int baseAddr = lr.objectsBeginAddr;
-    for (int i = 0; i < objects.Count; i++)
-    {
-        var obj = objects[i];
-        byte x = (byte)((obj.x-64*32)/8);
-        byte y = (byte)(obj.y /8);
-        Globals.romdata[baseAddr + objCount*3 + i] = (byte)obj.type;
-        Globals.romdata[baseAddr + objCount*1 + i] = (byte)obj.additionalData["data"];
-        Globals.romdata[baseAddr + objCount*0 + i] = x;
-        Globals.romdata[baseAddr + objCount*2 + i] = y;
-    }
-    for (int i = objects.Count; i < objCount; i++)
-    {
-        Globals.romdata[baseAddr + objCount*0 + i] = 0xFF;
-        Globals.romdata[baseAddr + objCount*1 + i] = 0xFF;
-        Globals.romdata[baseAddr + objCount*2 + i] = 0xFF;
-        Globals.romdata[baseAddr + objCount*3 + i] = 0xFF;
-    }
-    return true;
+    var pallete = new byte[] { 
+      0x0F, 0x02, 0x12, 0x22, 0x0F, 0x12, 0x19, 0x29,
+      0x0F, 0x02, 0x12, 0x35, 0x0F, 0x07, 0x17, 0x27
+    }; 
+    return pallete;
   }
 }

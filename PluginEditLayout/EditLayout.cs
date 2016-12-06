@@ -70,10 +70,10 @@ namespace CadEditor
             }
             blocksPanel.ResumeLayout();
 
-            Utils.setCbItemsCount(cbVideoNo, ConfigScript.videoOffset.recCount);
-            Utils.setCbItemsCount(cbBigBlockNo, ConfigScript.bigBlocksOffset.recCount);
-            Utils.setCbItemsCount(cbBlockNo, ConfigScript.blocksOffset.recCount);
-            Utils.setCbItemsCount(cbPaletteNo, ConfigScript.palOffset.recCount);
+            UtilsGui.setCbItemsCount(cbVideoNo, ConfigScript.videoOffset.recCount);
+            UtilsGui.setCbItemsCount(cbBigBlockNo, ConfigScript.bigBlocksOffsets[0].recCount);
+            UtilsGui.setCbItemsCount(cbBlockNo, ConfigScript.blocksOffset.recCount);
+            UtilsGui.setCbItemsCount(cbPaletteNo, ConfigScript.palOffset.recCount);
             cbVideoNo.SelectedIndex = 0;
             cbBigBlockNo.SelectedIndex = 0;
             cbBlockNo.SelectedIndex = 0;
@@ -92,8 +92,8 @@ namespace CadEditor
 
         private void reloadLevelLayer()
         {
-            int layoutAddr = Globals.getLayoutAddr(curActiveLayout);
-            int scrollAddr = Globals.getScrollAddr(curActiveLayout); //darkwing duck specific
+            int layoutAddr = ConfigScript.getLayoutAddr(curActiveLayout);
+            int scrollAddr = ConfigScript.getScrollAddr(curActiveLayout); //darkwing duck specific
             int width = curWidth;
             int height = curHeight;
             byte[] layer = new byte[width * height];
@@ -198,14 +198,14 @@ namespace CadEditor
 
         private void cbLevel_SelectedIndexChanged(object sender, EventArgs e)
         {
-            if (!Utils.askToSave(ref dirty, saveToFile, returnCbLevelIndex))
+            if (!UtilsGui.askToSave(ref dirty, saveToFile, returnCbLevelIndex))
                 return;
             if (cbLayoutNo.SelectedIndex == -1)
                 return;
 
             curActiveLayout = cbLayoutNo.SelectedIndex;
-            curWidth = Globals.getLevelWidth(curActiveLayout);
-            curHeight = Globals.getLevelHeight(curActiveLayout);
+            curWidth = ConfigScript.getLevelWidth(curActiveLayout);
+            curHeight = ConfigScript.getLevelHeight(curActiveLayout);
 
             drawMode = MapDrawMode.Screens;
             curActiveBlock = 0;
@@ -215,7 +215,7 @@ namespace CadEditor
             cbLayoutNo.Items.Clear();
             foreach (var lr in ConfigScript.levelRecs)
                 cbLayoutNo.Items.Add(String.Format("0x{0:X} ({1}x{2})", lr.layoutAddr, lr.width, lr.height));
-            Utils.setCbIndexWithoutUpdateLevel(cbLayoutNo, cbLevel_SelectedIndexChanged, curActiveLayout);
+            UtilsGui.setCbIndexWithoutUpdateLevel(cbLayoutNo, cbLevel_SelectedIndexChanged, curActiveLayout);
             reloadLevelLayer();
         }
 
@@ -264,8 +264,8 @@ namespace CadEditor
         private bool saveToFile()
         {
             int layerAddr, scrollAddr, width, height;
-            layerAddr = Globals.getLayoutAddr(curActiveLayout);
-            scrollAddr = Globals.getScrollAddr(curActiveLayout); //darkwing duck specific
+            layerAddr = ConfigScript.getLayoutAddr(curActiveLayout);
+            scrollAddr = ConfigScript.getScrollAddr(curActiveLayout); //darkwing duck specific
             width = curWidth;
             height = curHeight;
             for (int i = 0; i < width * height; i++)
@@ -280,7 +280,7 @@ namespace CadEditor
 
         private void returnCbLevelIndex()
         {
-            Utils.setCbIndexWithoutUpdateLevel(cbLayoutNo, cbLevel_SelectedIndexChanged, curActiveLayout);
+            UtilsGui.setCbIndexWithoutUpdateLevel(cbLayoutNo, cbLevel_SelectedIndexChanged, curActiveLayout);
         }
 
         private void btSave_Click(object sender, EventArgs e)

@@ -39,6 +39,7 @@
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|x86' ">
     <PlatformTarget>x86</PlatformTarget>
@@ -51,7 +52,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="CSScriptLibrary.v3.5">
-      <HintPath>..\libs\CSScript11\NET 3.5\CSScriptLibrary.v3.5.dll</HintPath>
+      <HintPath>..\libs\CSScript\NET 3.5\CSScriptLibrary.v3.5.dll</HintPath>
     </Reference>
     <Reference Include="Newtonsoft.Json, Version=4.5.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
@@ -119,6 +120,7 @@
     <Compile Include="Plugin.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="ResamplingService.cs" />
     <Compile Include="SegaBlockEdit.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -133,6 +135,8 @@
     </Compile>
     <Compile Include="Strings.cs" />
     <Compile Include="Utils.cs" />
+    <Compile Include="UtilsGdi.cs" />
+    <Compile Include="UtilsGui.cs" />
     <Compile Include="VideoHelper.cs" />
     <EmbeddedResource Include="BigBlockEdit.resx">
       <DependentUpon>BigBlockEdit.cs</DependentUpon>

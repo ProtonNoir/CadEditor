@@ -83,27 +83,31 @@ namespace CadEditor
                 screens2 = Utils.setScreens2();
         }
 
+        private void changeBlocksSize(Image[] bigImages)
+        {
+            blockHeight = 32;
+            float ratio = bigImages[0].Width / bigImages[0].Height;
+            blockWidth = (int)(blockHeight * ratio);
+        }
+
         private void resetControls()
         {
             curActiveLevelForScreen = 0;
-            Utils.setCbItemsCount(cbPanelNo, (ConfigScript.getBigBlocksCount()+1023) / 1024);
+            UtilsGui.setCbItemsCount(cbPanelNo, (ConfigScript.getBigBlocksCount(ConfigScript.getbigBlocksHierarchyCount()-1)+1023) / 1024);
             cbPanelNo.SelectedIndex = 0;
             resetScreens();
 
-            blockWidth = ConfigScript.getBlocksPicturesWidth();
-            blockHeight = 32;
-
-            Utils.setCbItemsCount(cbVideoNo, ConfigScript.videoOffset.recCount);
-            Utils.setCbItemsCount(cbBigBlockNo, ConfigScript.bigBlocksOffset.recCount);
-            Utils.setCbItemsCount(cbBlockNo, ConfigScript.blocksOffset.recCount);
-            Utils.setCbItemsCount(cbPaletteNo, ConfigScript.palOffset.recCount);
-            Utils.setCbItemsCount(cbLevelNo, ConfigScript.getLevelsCount());
-            Utils.setCbIndexWithoutUpdateLevel(cbVideoNo, cbLevel_SelectedIndexChanged);
-            Utils.setCbIndexWithoutUpdateLevel(cbBigBlockNo, cbLevel_SelectedIndexChanged);
-            Utils.setCbIndexWithoutUpdateLevel(cbBlockNo, cbLevel_SelectedIndexChanged);
-            Utils.setCbIndexWithoutUpdateLevel(cbPaletteNo, cbLevel_SelectedIndexChanged);
-            Utils.setCbIndexWithoutUpdateLevel(cbLevelNo, cbLevelNo_SelectedIndexChanged);
-            Utils.setCbIndexWithoutUpdateLevel(cbViewType, cbLevel_SelectedIndexChanged);
+            UtilsGui.setCbItemsCount(cbVideoNo, ConfigScript.videoOffset.recCount);
+            UtilsGui.setCbItemsCount(cbBigBlockNo, ConfigScript.bigBlocksOffsets[0].recCount);
+            UtilsGui.setCbItemsCount(cbBlockNo, ConfigScript.blocksOffset.recCount);
+            UtilsGui.setCbItemsCount(cbPaletteNo, ConfigScript.palOffset.recCount);
+            UtilsGui.setCbItemsCount(cbLevelNo, ConfigScript.getLevelsCount());
+            UtilsGui.setCbIndexWithoutUpdateLevel(cbVideoNo, cbLevel_SelectedIndexChanged);
+            UtilsGui.setCbIndexWithoutUpdateLevel(cbBigBlockNo, cbLevel_SelectedIndexChanged);
+            UtilsGui.setCbIndexWithoutUpdateLevel(cbBlockNo, cbLevel_SelectedIndexChanged);
+            UtilsGui.setCbIndexWithoutUpdateLevel(cbPaletteNo, cbLevel_SelectedIndexChanged);
+            UtilsGui.setCbIndexWithoutUpdateLevel(cbLevelNo, cbLevelNo_SelectedIndexChanged);
+            UtilsGui.setCbIndexWithoutUpdateLevel(cbViewType, cbLevel_SelectedIndexChanged);
 
             cbGroup.Items.Clear();
             foreach (var g in ConfigScript.getGroups())
@@ -111,7 +115,7 @@ namespace CadEditor
                 cbGroup.Items.Add(g.name);
             }
             /*if (cbGroup.Items.Count > 0)
-              Utils.setCbIndexWithoutUpdateLevel(cbGroup, cbGroup_SelectedIndexChanged);*/
+              UtilsGui.setCbIndexWithoutUpdateLevel(cbGroup, cbGroup_SelectedIndexChanged);*/
             dirty = false; updateSaveVisibility();
             showNeiScreens = true;
             showAxis = true;
@@ -123,7 +127,7 @@ namespace CadEditor
             prepareBlocksPanel();
 
             reloadGameType();
-            changeLevelIndex();
+            changeLevelIndex(true);
 
             bttBigBlocks.Enabled = ConfigScript.isBigBlockEditorEnabled;
             bttBlocks.Enabled = ConfigScript.isBlockEditorEnabled;
@@ -132,6 +136,8 @@ namespace CadEditor
             bttShowLayer1.Visible = ConfigScript.getLayersCount() > 1;
             bttShowLayer2.Visible = ConfigScript.getLayersCount() > 1;
             bttLayer.Visible = ConfigScript.getLayersCount() > 1;
+
+            pnGroups.Visible = ConfigScript.getGroups().Length > 0;
 
             resetMapScreenSize();
         }
@@ -156,28 +162,27 @@ namespace CadEditor
         private void setBigBlocksIndexes()
         {
           int bigTileIndex = curActiveBlockNo;
-          bigBlockIndexes = ConfigScript.getBigBlocks(bigTileIndex);
         }
 
         private Image[] makeSegaBigBlocks()
         {
-            byte[] mapping = ConfigScript.getBigBlocks(curActiveBigBlockNo);
+            byte[] mapping = ConfigScript.getSegaMapping(curActiveBigBlockNo);
             byte[] videoTiles = ConfigScript.getVideoChunk(curActiveVideoNo);
             byte[] pal = ConfigScript.getPal(curActivePalleteNo);
-            int count = ConfigScript.getBigBlocksCount();
+            int count = ConfigScript.getBigBlocksCount(ConfigScript.getbigBlocksHierarchyCount()-1);
             return ConfigScript.videoSega.makeBigBlocks(mapping, videoTiles, pal, count, curScale, curViewType, showAxis);
         }
 
         private void setBlocks(bool needToRefillBlockPanel)
         {
-            bigBlocks.Images.Clear();
-            //smallBlocks.Images.Clear();
-            bigBlocks.ImageSize = new Size((int)(curButtonScale * blockWidth), (int)(curButtonScale * blockHeight));
-
             //if using pictures
             if (ConfigScript.usePicturesInstedBlocks)
             {
-                Utils.setBlocks(bigBlocks, curButtonScale, blockWidth, blockHeight, curViewType, showAxis);
+                //get block size from image
+                blockWidth = ConfigScript.getBlocksPicturesWidth();
+                blockHeight = 32;
+
+                UtilsGDI.setBlocks(bigBlocks, curButtonScale, blockWidth, blockHeight, curViewType, showAxis);
                 if (needToRefillBlockPanel)
                     prepareBlocksPanel();
                 else
@@ -191,7 +196,7 @@ namespace CadEditor
             blockId = curActiveBigBlockNo;
             palId = curActivePalleteNo;
 
-            MapViewType smallObjectsType = 
+            MapViewType smallObjectsType =
                 curViewType == MapViewType.SmallObjNumbers ? MapViewType.ObjNumbers :
                   curViewType == MapViewType.ObjType ? MapViewType.ObjType : MapViewType.Tiles;
 
@@ -201,11 +206,17 @@ namespace CadEditor
             if (ConfigScript.isUseSegaGraphics())
                 bigImages = makeSegaBigBlocks();
             else
-                bigImages = ConfigScript.videoNes.makeBigBlocks(backId, curActiveLevelForScreen, blockId, bigTileIndex, palId, smallObjectsType, smallBlockScaleFactor, blockWidth, blockHeight, curButtonScale, curViewType, showAxis);
+            {
+                bigImages = ConfigScript.videoNes.makeBigBlocks(backId, blockId, bigTileIndex, palId, smallObjectsType, smallBlockScaleFactor, curButtonScale, curViewType, showAxis, ConfigScript.getbigBlocksHierarchyCount()-1);
+            }
+
+            changeBlocksSize(bigImages);
+            bigBlocks.Images.Clear();
+            bigBlocks.ImageSize = new Size((int)(curButtonScale * blockWidth), (int)(curButtonScale * blockHeight));
             bigBlocks.Images.AddRange(bigImages);
 
             //tt add
-            for (int i = ConfigScript.getBigBlocksCount(); i < 256; i++)
+            for (int i = ConfigScript.getBigBlocksCount(ConfigScript.getbigBlocksHierarchyCount()-1); i < 256; i++)
             {
                 bigBlocks.Images.Add(VideoHelper.emptyScreen((int)(blockWidth*curButtonScale),(int)(blockHeight*curButtonScale)));
             }
@@ -219,36 +230,38 @@ namespace CadEditor
 
         private void prepareBlocksPanel()
         {
-            int subparts = (ConfigScript.getBigBlocksCount()+1023) / 1024;
+            int lastHierarchy = ConfigScript.getbigBlocksHierarchyCount() - 1;
+            int subparts = (ConfigScript.getBigBlocksCount(lastHierarchy) +1023) / 1024;
             FlowLayoutPanel[] blocksPanels = { blocksPanel, blockPanel2, blockPanel3, blockPanel4 };
-            if (ConfigScript.getBigBlocksCount() < 1024)
+            if (ConfigScript.getBigBlocksCount(lastHierarchy) < 1024)
             {
-                Utils.prepareBlocksPanel(blocksPanels[0], new Size((int)(blockWidth * curButtonScale + 1), (int)(blockHeight * curButtonScale + 1)), bigBlocks, buttonBlockClick, 0, ConfigScript.getBigBlocksCount());
+                UtilsGui.prepareBlocksPanel(blocksPanels[0], new Size((int)(blockWidth * curButtonScale + 1), (int)(blockHeight * curButtonScale + 1)), bigBlocks, buttonBlockClick, 0, ConfigScript.getBigBlocksCount(lastHierarchy));
             }
             else
             {
                 for (int i = 0; i < subparts; i++)
                 {
-                    int count = (i * 1024 > ConfigScript.getBigBlocksCount()) ? (i * 1024) % ConfigScript.getBigBlocksCount() : 1024;
-                    Utils.prepareBlocksPanel(blocksPanels[i], new Size((int)(blockWidth * curButtonScale + 1), (int)(blockHeight * curButtonScale + 1)), bigBlocks, buttonBlockClick, i * 1024, count);
+                    int count = (i * 1024 > ConfigScript.getBigBlocksCount(lastHierarchy)) ? (i * 1024) % ConfigScript.getBigBlocksCount(lastHierarchy) : 1024;
+                    UtilsGui.prepareBlocksPanel(blocksPanels[i], new Size((int)(blockWidth * curButtonScale + 1), (int)(blockHeight * curButtonScale + 1)), bigBlocks, buttonBlockClick, i * 1024, count);
                 }
             }
         }
 
         private void reloadBlocksPanel()
         {
-             int subparts = (ConfigScript.getBigBlocksCount() + 1023) / 1024;
+             int lastHierarchy = ConfigScript.getbigBlocksHierarchyCount() - 1;
+             int subparts = (ConfigScript.getBigBlocksCount(lastHierarchy) + 1023) / 1024;
              FlowLayoutPanel[] blocksPanels = { blocksPanel, blockPanel2, blockPanel3, blockPanel4 };
-             if (ConfigScript.getBigBlocksCount() < 1024)
+             if (ConfigScript.getBigBlocksCount(lastHierarchy) < 1024)
              {
-                 Utils.reloadBlocksPanel(blocksPanels[0], bigBlocks, 0, ConfigScript.getBigBlocksCount());
+                UtilsGui.reloadBlocksPanel(blocksPanels[0], bigBlocks, 0, ConfigScript.getBigBlocksCount(lastHierarchy));
              }
              else
              {
                  for (int i = 0; i < subparts; i++)
                  {
-                     int count = (i * 1024 > ConfigScript.getBigBlocksCount()) ? (i * 1024) % ConfigScript.getBigBlocksCount() : 1024;
-                     Utils.reloadBlocksPanel(blocksPanels[i], bigBlocks, i * 1024, count);
+                     int count = (i * 1024 > ConfigScript.getBigBlocksCount(lastHierarchy)) ? (i * 1024) % ConfigScript.getBigBlocksCount(lastHierarchy) : 1024;
+                    UtilsGui.reloadBlocksPanel(blocksPanels[i], bigBlocks, i * 1024, count);
                  }
              }
         }
@@ -333,8 +346,8 @@ namespace CadEditor
             int TILE_SIZE_X = (int)(blockWidth * curScale);
             int TILE_SIZE_Y = (int)(blockHeight * curScale);
             int SIZE = WIDTH * HEIGHT;
-            var visibleRect = Utils.getVisibleRectangle(pnView, mapScreen);
-            MapEditor.Render(e.Graphics, bigBlocks, visibleRect, indexes, indexes2, curScale, showLayer1, showLayer2, true, ConfigScript.getScreenVertical() ? TILE_SIZE_Y : TILE_SIZE_X, WIDTH, HEIGHT, ConfigScript.getScreenVertical());
+            var visibleRect = UtilsGui.getVisibleRectangle(pnView, mapScreen);
+            MapEditor.Render(e.Graphics, bigBlocks, blockWidth, blockHeight, visibleRect, indexes, indexes2, curScale, showLayer1, showLayer2, true, ConfigScript.getScreenVertical() ? TILE_SIZE_Y : TILE_SIZE_X, WIDTH, HEIGHT, ConfigScript.getScreenVertical());
 
             if (!ConfigScript.getScreenVertical() && showNeiScreens && (curActiveScreen > 0) && showLayer1)
             {
@@ -399,8 +412,6 @@ namespace CadEditor
         private bool showLayer2;
         private int[][] screens;
         private int[][] screens2;
-
-        private byte[] bigBlockIndexes;
 
         public static bool fileLoaded = false;
 
@@ -599,7 +610,7 @@ namespace CadEditor
 
         private void cbLevel_SelectedIndexChanged(object sender, EventArgs ev)
         {
-            if (!Utils.askToSave(ref dirty, saveToFile, returnCbLevelIndex))
+            if (!UtilsGui.askToSave(ref dirty, saveToFile, returnCbLevelIndex))
             {
                 updateSaveVisibility();
                 return;
@@ -635,7 +646,7 @@ namespace CadEditor
 
         private void FormMain_FormClosing(object sender, FormClosingEventArgs e)
         {
-            if (!Utils.askToSave(ref dirty, saveToFile, returnCbLevelIndex))
+            if (!UtilsGui.askToSave(ref dirty, saveToFile, returnCbLevelIndex))
             {
                 updateSaveVisibility();
                 e.Cancel = true;
@@ -665,7 +676,7 @@ namespace CadEditor
 
         private bool openFile()
         {
-            if (!Utils.askToSave(ref dirty, saveToFile, returnCbLevelIndex))
+            if (!UtilsGui.askToSave(ref dirty, saveToFile, returnCbLevelIndex))
             {
                 updateSaveVisibility();
                 return false;
@@ -731,7 +742,7 @@ namespace CadEditor
 
         public void subeditorOpen(Form f, ToolStripButton b, bool showDialog = false)
         {
-            if (Utils.askToSave(ref dirty, saveToFile, returnCbLevelIndex))
+            if (UtilsGui.askToSave(ref dirty, saveToFile, returnCbLevelIndex))
             {
                 updateSaveVisibility();
                 b.Enabled = false;
@@ -971,7 +982,7 @@ namespace CadEditor
 
         private void bttReload_Click(object sender, EventArgs e)
         {
-            if (Utils.askToSave(ref dirty, saveToFile, returnCbLevelIndex))
+            if (UtilsGui.askToSave(ref dirty, saveToFile, returnCbLevelIndex))
             {
                 reloadLevel(true, true);
                 mapScreen.Invalidate();
@@ -980,7 +991,7 @@ namespace CadEditor
 
         private void cbLevelNo_SelectedIndexChanged(object sender, EventArgs e)
         {
-            if (!Utils.askToSave(ref dirty, saveToFile, returnCbLevelIndex))
+            if (!UtilsGui.askToSave(ref dirty, saveToFile, returnCbLevelIndex))
             {
                 updateSaveVisibility();
                 return;
@@ -989,6 +1000,11 @@ namespace CadEditor
             resetScreens();
             resetMapScreenSize();
             mapScreen.Invalidate();
+        }
+
+        private void cbAdvanced_CheckedChanged(object sender, EventArgs e)
+        {
+            pnAdvancedParams.Visible = cbAdvanced.Checked;
         }
 
         private void cbPanelNo_SelectedIndexChanged(object sender, EventArgs e)
@@ -1029,10 +1045,10 @@ namespace CadEditor
             if (cbGroup.SelectedIndex < 0)
                 return;
             GroupRec g = ConfigScript.getGroup(cbGroup.SelectedIndex);
-            Utils.setCbIndexWithoutUpdateLevel(cbVideoNo, cbLevel_SelectedIndexChanged, g.videoNo);
-            Utils.setCbIndexWithoutUpdateLevel(cbBigBlockNo, cbLevel_SelectedIndexChanged, g.bigBlockNo);
-            Utils.setCbIndexWithoutUpdateLevel(cbBlockNo, cbLevel_SelectedIndexChanged, g.blockNo);
-            Utils.setCbIndexWithoutUpdateLevel(cbPaletteNo, cbLevel_SelectedIndexChanged, g.palNo);
+            UtilsGui.setCbIndexWithoutUpdateLevel(cbVideoNo, cbLevel_SelectedIndexChanged, g.videoNo);
+            UtilsGui.setCbIndexWithoutUpdateLevel(cbBigBlockNo, cbLevel_SelectedIndexChanged, g.bigBlockNo);
+            UtilsGui.setCbIndexWithoutUpdateLevel(cbBlockNo, cbLevel_SelectedIndexChanged, g.blockNo);
+            UtilsGui.setCbIndexWithoutUpdateLevel(cbPaletteNo, cbLevel_SelectedIndexChanged, g.palNo);
             cbLevel_SelectedIndexChanged(cbVideoNo, new EventArgs());
             if (g.firstScreen < 0 || g.firstScreen <= cbScreenNo.Items.Count)
               cbScreenNo.SelectedIndex = g.firstScreen - 1;

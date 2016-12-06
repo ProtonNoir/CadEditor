@@ -40,18 +40,18 @@ namespace CadEditor
 
         protected virtual void resetControls()
         {
-            Utils.setCbItemsCount(cbVideo, ConfigScript.videoOffset.recCount);
-            Utils.setCbItemsCount(cbTileset, ConfigScript.blocksOffset.recCount);
-            Utils.setCbItemsCount(cbPalette, ConfigScript.palOffset.recCount);
+            UtilsGui.setCbItemsCount(cbVideo, ConfigScript.videoOffset.recCount);
+            UtilsGui.setCbItemsCount(cbTileset, ConfigScript.blocksOffset.recCount);
+            UtilsGui.setCbItemsCount(cbPalette, ConfigScript.palOffset.recCount);
 
 
-            Utils.setCbIndexWithoutUpdateLevel(cbTileset, cbLevelSelect_SelectedIndexChanged, formMain.CurActiveBigBlockNo);  //small blocks no?
-            Utils.setCbIndexWithoutUpdateLevel(cbVideo, VisibleOnlyChange_SelectedIndexChanged, formMain.CurActiveVideoNo - 0x90);
-            Utils.setCbIndexWithoutUpdateLevel(cbPalette, VisibleOnlyChange_SelectedIndexChanged, formMain.CurActivePalleteNo);
+            UtilsGui.setCbIndexWithoutUpdateLevel(cbTileset, cbLevelSelect_SelectedIndexChanged, formMain.CurActiveBigBlockNo);  //small blocks no?
+            UtilsGui.setCbIndexWithoutUpdateLevel(cbVideo, VisibleOnlyChange_SelectedIndexChanged, formMain.CurActiveVideoNo - 0x90);
+            UtilsGui.setCbIndexWithoutUpdateLevel(cbPalette, VisibleOnlyChange_SelectedIndexChanged, formMain.CurActivePalleteNo);
             curActiveBigBlock = formMain.CurActiveBigBlockNo; //small blocks no?
             curActiveVideo = formMain.CurActiveVideoNo;
             curActivePal = formMain.CurActivePalleteNo;
-            Utils.setCbIndexWithoutUpdateLevel(cbSubpalette, cbSubpalette_SelectedIndexChanged);
+            UtilsGui.setCbIndexWithoutUpdateLevel(cbSubpalette, cbSubpalette_SelectedIndexChanged);
         }
 
         protected void reloadLevel(bool resetDirty = true)
@@ -120,7 +120,7 @@ namespace CadEditor
             byte backId = getBackId();
             for (int i = 0; i < 4; i++)
             {
-                Bitmap b = ConfigScript.videoNes.makeImageStrip(ConfigScript.getVideoChunk(backId), palette, i, 2, !showAxis);
+                Bitmap b = ConfigScript.videoNes.makeImageStrip(ConfigScript.getVideoChunk(backId), palette, i, 2, true);
                 videoSprites[i].Images.Clear();
                 videoSprites[i].Images.AddStrip(b);
             }
@@ -528,7 +528,7 @@ namespace CadEditor
             if (data == null)
                 return;
 
-            int addr = Globals.getTilesAddr(getBigBlockNo());
+            int addr = ConfigScript.getTilesAddr(getBigBlockNo());
             for (int i = 0; i < ConfigScript.getBlocksCount(); i++)
             {
                 Globals.romdata[addr + i] = data[i];

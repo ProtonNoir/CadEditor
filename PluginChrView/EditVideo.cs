@@ -19,11 +19,11 @@ namespace CadEditor
         {
             curActiveVideo = 0;
             curSubPal = 0;
-            Utils.setCbItemsCount(cbVideoNo, ConfigScript.videoOffset.recCount);
-            Utils.setCbItemsCount(cbPalleteNo, ConfigScript.palOffset.recCount);
-            Utils.setCbIndexWithoutUpdateLevel(cbVideoNo, cbVideoNo_SelectedIndexChanged);
-            Utils.setCbIndexWithoutUpdateLevel(cbSubPal, cbVideoNo_SelectedIndexChanged);
-            //Utils.setCbIndexWithoutUpdateLevel(cbPalleteNo, cbPalleteNo_SelectedIndexChanged);
+            UtilsGui.setCbItemsCount(cbVideoNo, ConfigScript.videoOffset.recCount);
+            UtilsGui.setCbItemsCount(cbPalleteNo, ConfigScript.palOffset.recCount);
+            UtilsGui.setCbIndexWithoutUpdateLevel(cbVideoNo, cbVideoNo_SelectedIndexChanged);
+            UtilsGui.setCbIndexWithoutUpdateLevel(cbSubPal, cbVideoNo_SelectedIndexChanged);
+            //UtilsGui.setCbIndexWithoutUpdateLevel(cbPalleteNo, cbPalleteNo_SelectedIndexChanged);
             cbPalleteNo.SelectedIndex = 0;
         }
 
@@ -46,16 +46,7 @@ namespace CadEditor
         {
             setPal();
             byte videoPageId = (byte)(curActiveVideo + 0x90);
-            Bitmap imageStrip = ConfigScript.videoNes.makeImageStrip(ConfigScript.getVideoChunk(videoPageId), curPal, curSubPal, 4);
-            Bitmap resultVideo = new Bitmap(512, 512);
-            using (Graphics g = Graphics.FromImage(resultVideo))
-            {
-                for (int i = 0; i < 256; i++)
-                {
-                    g.DrawImage(imageStrip, new Rectangle(i%16 * 32, (i/16) *32, 32, 32), new Rectangle(i * 32, 0, 32, 32) , GraphicsUnit.Pixel);
-                }
-            }
-            pbVideo.Image = resultVideo;
+            pbVideo.Image = ConfigScript.videoNes.makeImageRectangle(ConfigScript.getVideoChunk(videoPageId), curPal, curSubPal, 4);
         }
 
         private int curActiveVideo = 0;

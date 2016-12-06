@@ -109,6 +109,44 @@ namespace PluginVideoNes
                 nesColors = ConfigScript.nesColors;
         }
 
+        public Bitmap makeImage(int index, byte[] videoChunk, byte[] pallete, int subPalIndex, float scale, bool scaleAccurate = true, bool withAlpha = false)
+        {
+            Bitmap res = new Bitmap((int)(8 * scale), (int)(8 * scale));
+            using (Graphics g = Graphics.FromImage(res))
+            {
+                int i = index;
+                float bitmapScale = scaleAccurate ? scale : 1;
+                int beginIndex = 16 * i;
+                for (int line = 0; line < 8; line++)
+                {
+                    for (int pixel = 0; pixel < 8; pixel++)
+                    {
+                        bool bitLo = Utils.getBit(videoChunk[beginIndex + line], 8 - pixel);
+                        bool bitHi = Utils.getBit(videoChunk[beginIndex + line + 8], 8 - pixel);
+                        int palIndex = mixBits(bitHi, bitLo);
+                        int fullPalIndex = subPalIndex * 4 + palIndex;
+                        int colorNo = pallete[fullPalIndex];
+                        Color c = (withAlpha && (fullPalIndex % 4 == 0)) ? Color.FromArgb(0) : nesColors[colorNo];
+                        if (scaleAccurate && (scale > 1.0f))
+                        {
+                            int scaleInt = (int)scale;
+                            for (int scaleFillX = 0; scaleFillX < scaleInt; scaleFillX++)
+                                for (int scaleFillY = 0; scaleFillY < scaleInt; scaleFillY++)
+                                    res.SetPixel(pixel * scaleInt + scaleFillX, line * scaleInt + scaleFillY, c);
+                        }
+                        else
+                        {
+                            if (scale > 1.0f)
+                                res.SetPixel(pixel, line, c);
+                            else
+                                res.SetPixel((int)(pixel * scale), (int)(line * scale), c);
+                        }
+                    }
+                }
+            }
+            return res;
+        }
+
         public Bitmap makeImageStrip(byte[] videoChunk, byte[] pallete, int subPalIndex, float scale, bool scaleAccurate = true, bool withAlpha = false)
         {
             Bitmap res = new Bitmap((int)(8 * CHUNK_COUNT * scale), (int)(8 * scale));
@@ -117,44 +155,86 @@ namespace PluginVideoNes
                 for (int i = 0; i < CHUNK_COUNT; i++)
                 {
                     float bitmapScale = scaleAccurate ? scale : 1;
-                    Bitmap onePic = new Bitmap((int)(8 * bitmapScale), (int)(8 * bitmapScale));
-                    int beginIndex = 16 * i;
-                    for (int line = 0; line < 8; line++)
-                    {
-                        for (int pixel = 0; pixel < 8; pixel++)
-                        {
-                            bool bitLo = Utils.getBit(videoChunk[beginIndex + line], 8 - pixel);
-                            bool bitHi = Utils.getBit(videoChunk[beginIndex + line + 8], 8 - pixel);
-                            int palIndex = mixBits(bitHi, bitLo);
-                            int fullPalIndex = subPalIndex * 4 + palIndex;
-                            int colorNo = pallete[fullPalIndex];
-                            Color c = (withAlpha && (fullPalIndex % 4 == 0)) ? Color.FromArgb(0) : nesColors[colorNo];
-                            if (scaleAccurate && (scale > 1.0f))
-                            {
-                                int scaleInt = (int)scale;
-                                for (int scaleFillX = 0; scaleFillX < scaleInt; scaleFillX++)
-                                    for (int scaleFillY = 0; scaleFillY < scaleInt; scaleFillY++)
-                                        onePic.SetPixel(pixel * scaleInt + scaleFillX, line * scaleInt + scaleFillY, c);
-                            }
-                            else
-                            {
-                                if (scale > 1.0f)
-                                    onePic.SetPixel(pixel, line, c);
-                                else
-                                    onePic.SetPixel((int)(pixel * scale), (int)(line * scale), c);
-                            }
-                        }
-                    }
+                    Bitmap onePic = makeImage(i, videoChunk, pallete, subPalIndex, scale, scaleAccurate, withAlpha);
                     g.DrawImage(onePic, new Rectangle((int)(i * 8 * scale), 0, (int)(8 * scale), (int)(8 * scale)));
                 }
             }
             return res;
         }
 
+        //TODO: write universal "RectangulateStripImage function"
+        //using makeImageStrip for now. Return rectangle CHR bank image
+        public Bitmap makeImageRectangle(byte[] videoChunk, byte[] pallete, int subPalIndex, float scale, bool scaleAccurate = true, bool withAlpha = false)
+        {
+            Bitmap imageStrip = ConfigScript.videoNes.makeImageStrip(videoChunk, pallete, subPalIndex, scale, scaleAccurate, withAlpha);
+            Bitmap resultVideo = new Bitmap((int)(128*scale), (int)(128*scale));
+            using (Graphics g = Graphics.FromImage(resultVideo))
+            {
+                for (int i = 0; i < 256; i++)
+                {
+                    int size = (int)(8* scale);
+                    g.DrawImage(imageStrip, new Rectangle(i%16 * size, (i/16) *size, size, size), new Rectangle(i * size, 0, size, size) , GraphicsUnit.Pixel);
+                }
+            }
+            return resultVideo;
+        }
+
+        public Bitmap makeObject(int index, ObjRec[] objects, Bitmap[] objStrips, float scale, MapViewType drawType, int constantSubpal = -1)
+        {
+            int i = index;
+            var mblock = new Bitmap((int)(16 * scale), (int)(16 * scale));
+            var co = objects[i];
+            Bitmap curStrip;
+            if (constantSubpal == -1)
+            {
+                if (Globals.getGameType() == GameType.DT2)
+                {
+                    var objectForColor = objects[i / 4];
+                    curStrip = objStrips[objectForColor.getSubpalleteForDt2(i % 4)];
+                }
+                else
+                {
+                    curStrip = objStrips[co.getSubpallete()];
+                }
+            }
+            else
+            {
+                curStrip = objStrips[constantSubpal];
+            }
+
+            int scaleInt8 = (int)(scale * 8);
+            int scaleInt16 = (int)(scale * 16);
+            using (Graphics g2 = Graphics.FromImage(mblock))
+            {
+                g2.DrawImage(curStrip, new Rectangle(0, 0, scaleInt8, scaleInt8), new Rectangle(co.c1 * scaleInt8, 0, scaleInt8, scaleInt8), GraphicsUnit.Pixel);
+                g2.DrawImage(curStrip, new Rectangle(scaleInt8, 0, scaleInt8, scaleInt8), new Rectangle(co.c2 * scaleInt8, 0, scaleInt8, scaleInt8), GraphicsUnit.Pixel);
+                g2.DrawImage(curStrip, new Rectangle(0, scaleInt8, scaleInt8, scaleInt8), new Rectangle(co.c3 * scaleInt8, 0, scaleInt8, scaleInt8), GraphicsUnit.Pixel);
+                g2.DrawImage(curStrip, new Rectangle(scaleInt8, scaleInt8, scaleInt8, scaleInt8), new Rectangle(co.c4 * scaleInt8, 0, scaleInt8, scaleInt8), GraphicsUnit.Pixel);
+                if (drawType == MapViewType.ObjType)
+                {
+                    if (Globals.getGameType() == GameType.DT2)
+                    {
+                        g2.FillRectangle(new SolidBrush(CadObjectTypeColors[co.getTypeForDt2(i)]), new Rectangle(0, 0, scaleInt16, scaleInt16));
+                        g2.DrawString(String.Format("{0:X}", co.getTypeForDt2(i)), new Font("Arial", 6), Brushes.White, new Point(0, 0));
+                    }
+                    else
+                    {
+                        g2.FillRectangle(new SolidBrush(CadObjectTypeColors[co.getType()]), new Rectangle(0, 0, scaleInt16, scaleInt16));
+                        g2.DrawString(String.Format("{0:X}", co.getType()), new Font("Arial", 6), Brushes.White, new Point(0, 0));
+                    }
+                }
+                else if (drawType == MapViewType.ObjNumbers)
+                {
+                    g2.FillRectangle(new SolidBrush(Color.FromArgb(192, 255, 255, 255)), new Rectangle(0, 0, scaleInt16, scaleInt16));
+                    g2.DrawString(String.Format("{0:X}", i), new Font("Arial", 6), Brushes.Red, new Point(0, 0));
+                }
+            }
+            return mblock;
+        }
+
         public Bitmap makeObjectsStrip(byte videoPageId, byte tilesId, byte palId, float scale, MapViewType drawType, int constantSubpal = -1)
         {
             byte[] videoChunk = ConfigScript.getVideoChunk(videoPageId);
-
             int blocksCount = ConfigScript.getBlocksCount();
             ObjRec[] objects = ConfigScript.getBlocks(tilesId);
 
@@ -169,93 +249,84 @@ namespace PluginVideoNes
             {
                 for (int i = 0; i < blocksCount; i++)
                 {
-                    var mblock = new Bitmap((int)(16 * scale), (int)(16 * scale));
-                    var co = objects[i];
-                    Bitmap curStrip;
-                    if (constantSubpal == -1)
-                    {
-                        if (Globals.getGameType() == GameType.DT2)
-                        {
-                            var objectForColor = objects[i / 4];
-                            curStrip = objStrips[objectForColor.getSubpalleteForDt2(i % 4)];
-                        }
-                        else
-                        {
-                            curStrip = objStrips[co.getSubpallete()];
-                        }
-                    }
-                    else
-                    {
-                        curStrip = objStrips[constantSubpal];
-                    }
-
-                    int scaleInt8 = (int)(scale * 8);
+                    var mblock = makeObject(i, objects, objStrips, scale, drawType, constantSubpal);
                     int scaleInt16 = (int)(scale * 16);
-                    using (Graphics g2 = Graphics.FromImage(mblock))
-                    {
-                        g2.DrawImage(curStrip, new Rectangle(0, 0, scaleInt8, scaleInt8), new Rectangle(co.c1 * scaleInt8, 0, scaleInt8, scaleInt8), GraphicsUnit.Pixel);
-                        g2.DrawImage(curStrip, new Rectangle(scaleInt8, 0, scaleInt8, scaleInt8), new Rectangle(co.c2 * scaleInt8, 0, scaleInt8, scaleInt8), GraphicsUnit.Pixel);
-                        g2.DrawImage(curStrip, new Rectangle(0, scaleInt8, scaleInt8, scaleInt8), new Rectangle(co.c3 * scaleInt8, 0, scaleInt8, scaleInt8), GraphicsUnit.Pixel);
-                        g2.DrawImage(curStrip, new Rectangle(scaleInt8, scaleInt8, scaleInt8, scaleInt8), new Rectangle(co.c4 * scaleInt8, 0, scaleInt8, scaleInt8), GraphicsUnit.Pixel);
-                        if (drawType == MapViewType.ObjType)
-                        {
-                            if (Globals.getGameType() == GameType.DT2)
-                            {
-                                g2.FillRectangle(new SolidBrush(CadObjectTypeColors[co.getTypeForDt2(i)]), new Rectangle(0, 0, scaleInt16, scaleInt16));
-                                g2.DrawString(String.Format("{0:X}", co.getTypeForDt2(i)), new Font("Arial", 6), Brushes.White, new Point(0, 0));
-                            }
-                            else
-                            {
-                                g2.FillRectangle(new SolidBrush(CadObjectTypeColors[co.getType()]), new Rectangle(0, 0, scaleInt16, scaleInt16));
-                                g2.DrawString(String.Format("{0:X}", co.getType()), new Font("Arial", 6), Brushes.White, new Point(0, 0));
-                            }
-                        }
-                        else if (drawType == MapViewType.ObjNumbers)
-                        {
-                            g2.FillRectangle(new SolidBrush(Color.FromArgb(192, 255, 255, 255)), new Rectangle(0, 0, scaleInt16, scaleInt16));
-                            g2.DrawString(String.Format("{0:X}", i), new Font("Arial", 6), Brushes.Red, new Point(0, 0));
-                        }
-                    }
                     g.DrawImage(mblock, new Rectangle(i * scaleInt16, 0, scaleInt16, scaleInt16));
                 }
             }
             return res;
-
         }
 
-
-
-        public Image[] makeBigBlocks(int videoNo, int levelNo, int bigBlockNo, int blockNo, int palleteNo, MapViewType smallObjectsViewType = MapViewType.Tiles,
-            float smallBlockScaleFactor = 2.0f, int blockWidth = 32, int blockHeight = 32, float curButtonScale = 2, MapViewType curViewType = MapViewType.Tiles, bool showAxis = false)
+        //TODO: write universal "RectangulateStripImage function"
+        //using makeObjectsStrip for now. Return rectangle small blocks objects
+        public Bitmap makeObjectsRectangle(byte videoPageId, byte tilesId, byte palId, float scale, MapViewType drawType, int constantSubpal = -1)
         {
-            int blockCount = ConfigScript.getBigBlocksCount();
-            int SCREEN_SIZE = ConfigScript.getScreenWidth(levelNo) * ConfigScript.getScreenHeight(levelNo);
+            Bitmap imageStrip = ConfigScript.videoNes.makeObjectsStrip(videoPageId, tilesId, palId, scale, drawType, constantSubpal);
+            //print only first 256 blocks
+            int BLOCKS_IN_ROW = 16;
+            int BLOCKS_IN_COL = 16;
+            Bitmap resultVideo = new Bitmap((int)(16*scale*BLOCKS_IN_ROW), (int)(16*scale*BLOCKS_IN_COL));
+            using (Graphics g = Graphics.FromImage(resultVideo))
+            {
+                for (int i = 0; i < 256; i++)
+                {
+                    int size = (int)(16 * scale);
+                    g.DrawImage(imageStrip, new Rectangle(i%16 * size, (i/16) *size, size, size), new Rectangle(i * size, 0, size, size) , GraphicsUnit.Pixel);
+                }
+            }
+            return resultVideo;
+        }
+
+         public Image[] makeBigBlocks(int videoNo, int bigBlockNo, int blockNo, int palleteNo, MapViewType smallObjectsViewType = MapViewType.Tiles,
+            float smallBlockScaleFactor = 2.0f, float curButtonScale = 2, MapViewType curViewType = MapViewType.Tiles, bool showAxis = false, int hierarchyLevel = 0)
+        {
+            byte blockIndexId = (byte)blockNo;
+            BigBlock[] bigBlockIndexes = ConfigScript.getBigBlocksRecursive(hierarchyLevel, blockIndexId);
+            return makeBigBlocks(videoNo, bigBlockNo, bigBlockIndexes, palleteNo, smallObjectsViewType, smallBlockScaleFactor, curButtonScale, curViewType, showAxis, hierarchyLevel);
+        }
+
+        public Image[] makeBigBlocks(int videoNo, int bigBlockNo, BigBlock[] bigBlockIndexes, int palleteNo, MapViewType smallObjectsViewType = MapViewType.Tiles,
+            float smallBlockScaleFactor = 2.0f, float curButtonScale = 2, MapViewType curViewType = MapViewType.Tiles, bool showAxis = false, int hierarchyLevel = 0)
+        {
+            int blockCount = ConfigScript.getBigBlocksCount(hierarchyLevel);
             var bigBlocks = new Image[blockCount];
 
             byte blockId = (byte)bigBlockNo;
-            byte blockIndexId = (byte)blockNo;
             byte backId = (byte)videoNo;
             byte palId = (byte)palleteNo;
-            byte[] bigBlockIndexes = ConfigScript.getBigBlocks(blockIndexId);
 
-            var im = makeObjectsStrip(backId, blockId, palId, smallBlockScaleFactor, smallObjectsViewType);
             var smallBlocks = new System.Windows.Forms.ImageList();
-            smallBlocks.ImageSize = new Size((int)(16 * smallBlockScaleFactor), (int)(16 * smallBlockScaleFactor));
-            smallBlocks.Images.AddStrip(im);
+            if (hierarchyLevel == 0)
+            {
+                var im = makeObjectsStrip(backId, blockId, palId, smallBlockScaleFactor, smallObjectsViewType);
+                smallBlocks.ImageSize = new Size((int)(16 * smallBlockScaleFactor), (int)(16 * smallBlockScaleFactor));
+                smallBlocks.Images.AddStrip(im);
+            }
+            else
+            {
+                var ims = makeBigBlocks(videoNo, bigBlockNo, ConfigScript.getBigBlocksRecursive(hierarchyLevel - 1, bigBlockNo), palleteNo, smallObjectsViewType, smallBlockScaleFactor, curButtonScale, curViewType, false, hierarchyLevel - 1);
+                smallBlocks.ImageSize = ims[0].Size;
+                smallBlocks.Images.AddRange(ims);
+            }
+            Image[] smallBlocksPack = smallBlocks.Images.Cast<Image>().ToArray();
 
             //tt version hardcode
-            ImageList[] smallBlocksAll = null;
-            byte[] smallBlocksColorBytes = null;
+            Image[][] smallBlocksAll = null;
             if (GameType.TT == Globals.getGameType())
             {
-                smallBlocksAll = new ImageList[4];
+                smallBlocksAll = new Image[4][];
                 for (int i = 0; i < 4; i++)
                 {
-                    smallBlocksAll[i] = new ImageList();
-                    smallBlocksAll[i].ImageSize = new System.Drawing.Size((int)(16 * smallBlockScaleFactor), (int)(16 * smallBlockScaleFactor));
-                    smallBlocksAll[i].Images.AddStrip(makeObjectsStrip((byte)backId, (byte)blockId, (byte)palId, smallBlockScaleFactor, smallObjectsViewType, i));
+                    var il = new ImageList();
+                    il.ImageSize = new System.Drawing.Size((int)(16 * smallBlockScaleFactor), (int)(16 * smallBlockScaleFactor));
+                    il.Images.AddStrip(makeObjectsStrip((byte)backId, (byte)blockId, (byte)palId, smallBlockScaleFactor, smallObjectsViewType, i));
+                    smallBlocksAll[i] = il.Images.Cast<Image>().ToArray();
                 }
-                smallBlocksColorBytes = getTTSmallBlocksColorBytes(blockId);
+            }
+            else
+            {
+                smallBlocksAll = new Image[1][];
+                smallBlocksAll[0] = smallBlocksPack;
             }
 
             for (int btileId = 0; btileId < blockCount; btileId++)
@@ -263,22 +334,12 @@ namespace PluginVideoNes
                 Image b;
                 if (ConfigScript.isBuildScreenFromSmallBlocks())
                 {
-                    b = Utils.ResizeBitmap(smallBlocks.Images[btileId], (int)(blockWidth * curButtonScale), (int)(blockHeight * curButtonScale));
+                    var sb = smallBlocks.Images[btileId];
+                    b = UtilsGDI.ResizeBitmap(sb, (int)(sb.Width * curButtonScale * 2), (int)(sb.Height * curButtonScale * 2));
                 }
                 else
                 {
-                    switch (Globals.getGameType())
-                    {
-                        case GameType.TT:
-                            b = makeBigBlockTT(btileId, (int)(blockWidth * curButtonScale), (int)(blockHeight * curButtonScale), bigBlockIndexes, smallBlocksAll, smallBlocksColorBytes);
-                            break;
-                        case GameType._3E:
-                            b = makeBigBlock3E(btileId, (int)(blockWidth * curButtonScale), (int)(blockHeight * curButtonScale), bigBlockIndexes, smallBlocks);
-                            break;
-                        default:
-                            b = makeBigBlock(btileId, (int)(blockWidth * curButtonScale), (int)(blockHeight * curButtonScale), bigBlockIndexes, smallBlocks);
-                            break;
-                    }
+                    b = makeBigBlock(btileId, bigBlockIndexes, smallBlocksAll);
                 }
                 if (curViewType == MapViewType.ObjNumbers)
                     b = VideoHelper.addObjNumber(b, btileId);
@@ -289,22 +350,19 @@ namespace PluginVideoNes
             return bigBlocks;
         }
 
-        private static byte[] getTTSmallBlocksColorBytes(int bigTileIndex)
+        private static byte getTTSmallBlocksColorByte(int index)
         {
-            int btc = ConfigScript.getBigBlocksCount();
-            var colorBytes = new byte[btc];
-            int addr = Globals.getBigTilesAddr(bigTileIndex);
-            for (int i = 0; i < ConfigScript.getBigBlocksCount(); i++)
-                colorBytes[i] = Globals.romdata[addr + btc * 4 + i];
-            return colorBytes;
+            int btc = ConfigScript.getBigBlocksCount(0);
+            int addr = ConfigScript.getBigTilesAddr(0, 0);
+            return Globals.romdata[addr + btc * 4 + index];
         }
 
         //make capcom screen image
-        public Bitmap makeScreen(int scrNo, int levelNo, int videoNo, int bigBlockNo, int blockNo, int palleteNo, float scale = 2.0f)
+        public Bitmap makeScreen(int scrNo, int levelNo, int videoNo, int bigBlockNo, int blockNo, int palleteNo, float scale = 2.0f, bool withBorders = true)
         {
             if (scrNo < 0)
                 return VideoHelper.emptyScreen((int)(ConfigScript.getScreenWidth(levelNo) * 32 * scale), (int)(ConfigScript.getScreenHeight(levelNo) * 32 * scale));
-            var bigBlocks = makeBigBlocks(videoNo, levelNo, bigBlockNo, blockNo, palleteNo, MapViewType.Tiles, scale, 32, 32, scale, MapViewType.Tiles, true);
+            var bigBlocks = makeBigBlocks(videoNo, bigBlockNo, blockNo, palleteNo, MapViewType.Tiles, scale, scale, MapViewType.Tiles, withBorders);
             var il = new ImageList();
             if (bigBlocks.Length > 0)
             {
@@ -314,57 +372,65 @@ namespace PluginVideoNes
             int[] indexes = Globals.getScreen(ConfigScript.screensOffset[levelNo], scrNo);
             int scrW = ConfigScript.getScreenWidth(0); //zero as screenNoForLevel
             int scrH = ConfigScript.getScreenHeight(0);
-            return new Bitmap(MapEditor.ScreenToImage(il, indexes, null, scale, true, false, false, 0, scrW, scrH, ConfigScript.getScreenVertical()));
+            //capcom hardcode
+            return new Bitmap(MapEditor.ScreenToImage(il, 32, 32, indexes, null, scale, true, false, false, 0, scrW, scrH, ConfigScript.getScreenVertical()));
         }
+
         #region Render Functions
-        public Bitmap makeBigBlock(int i, int width, int height, byte[] bigBlockIndexes, System.Windows.Forms.ImageList smallBlocks)
+        public Bitmap makeBigBlock(int i, BigBlock[] bigBlocks, Image[][] smallBlockss)
         {
-            int bbRectPosX = width / 2;
-            int bbRectSizeX = width / 2;
-            int bbRectPosY = height / 2;
-            int bbRectSizeY = height / 2;
-            var b = new Bitmap(width, height);
-            using (Graphics g = Graphics.FromImage(b))
+            Bitmap b;
+            switch (Globals.getGameType())
             {
-                g.DrawImage(smallBlocks.Images[bigBlockIndexes[i * 4]], new Rectangle(0, 0, bbRectSizeX, bbRectSizeY));
-                g.DrawImage(smallBlocks.Images[bigBlockIndexes[i * 4 + 1]], new Rectangle(bbRectPosX, 0, bbRectSizeX, bbRectSizeY));
-                g.DrawImage(smallBlocks.Images[bigBlockIndexes[i * 4 + 2]], new Rectangle(0, bbRectPosY, bbRectSizeX, bbRectSizeY));
-                g.DrawImage(smallBlocks.Images[bigBlockIndexes[i * 4 + 3]], new Rectangle(bbRectPosX, bbRectPosY, bbRectSizeX, bbRectSizeY));
+                case GameType.TT:
+                    b = (smallBlockss.Length > 1) ? makeBigBlockTT(i, bigBlocks, smallBlockss) : makeBigBlockCapcom(i, bigBlocks, smallBlockss);
+                    break;
+                default:
+                    b = makeBigBlockCapcom(i, bigBlocks, smallBlockss);
+                    break;
             }
             return b;
         }
 
-        public Bitmap makeBigBlock3E(int i, int width, int height, byte[] bigBlockIndexes, System.Windows.Forms.ImageList smallBlocks)
+        public Bitmap makeBigBlockCapcom(int i, BigBlock[] bigBlocks, Image[][] smallBlockss)
         {
-            int bbRectPosX = width / 2;
-            int bbRectSizeX = width / 2;
-            int bbRectPosY = height / 2;
-            int bbRectSizeY = height / 2;
-            var b = new Bitmap(width, height);
+            var smallBlocks = smallBlockss[0];
+            int bWidth = smallBlocks[0].Width;
+            int bHeight = smallBlocks[0].Height;
+            var bb = bigBlocks[i];
+            var b = new Bitmap(bWidth*bb.width, bHeight*bb.height);
             using (Graphics g = Graphics.FromImage(b))
             {
-                g.DrawImage(smallBlocks.Images[bigBlockIndexes[i * 4 + 0]], new Rectangle(0, 0, bbRectSizeX, bbRectSizeY));
-                g.DrawImage(smallBlocks.Images[bigBlockIndexes[i * 4 + 2]], new Rectangle(bbRectPosX, 0, bbRectSizeX, bbRectSizeY));
-                g.DrawImage(smallBlocks.Images[bigBlockIndexes[i * 4 + 1]], new Rectangle(0, bbRectPosY, bbRectSizeX, bbRectSizeY));
-                g.DrawImage(smallBlocks.Images[bigBlockIndexes[i * 4 + 3]], new Rectangle(bbRectPosX, bbRectPosY, bbRectSizeX, bbRectSizeY));
+                for (int h = 0; h < bb.height; h++)
+                {
+                    for (int w = 0; w < bb.width; w++)
+                    {
+                        int sbX = w * bWidth;
+                        int sbY = h * bHeight;
+                        int idx = h * bb.width + w;
+                        var r = new Rectangle(sbX, sbY, bWidth, bHeight);
+                        g.DrawImage(smallBlocks[bb.indexes[idx]], r);
+                    }
+                }
             }
             return b;
         }
 
-        public Bitmap makeBigBlockTT(int i, int width, int height, byte[] bigBlockIndexes, System.Windows.Forms.ImageList[] smallBlocksAll, byte[] smallBlocksColorBytes)
+        public Bitmap makeBigBlockTT(int i, BigBlock[] bigBlocks, Image[][] smallBlocksAll)
         {
-            int bbRectPosX = width / 2;
-            int bbRectSizeX = width / 2;
-            int bbRectPosY = height / 2;
-            int bbRectSizeY = height / 2;
-            var b = new Bitmap(width, height);
+            //calc size
+            var smallBlocks = smallBlocksAll[0];
+            int bWidth = smallBlocks[0].Width;
+            int bHeight = smallBlocks[0].Height;
+            var bb = bigBlocks[i];
+            var b = new Bitmap(bWidth * bb.width, bHeight * bb.height);
             using (Graphics g = Graphics.FromImage(b))
             {
-                int scb = smallBlocksColorBytes[i];
-                g.DrawImage(smallBlocksAll[scb >> 0 & 0x3].Images[bigBlockIndexes[i * 4]], new Rectangle(0, 0, bbRectSizeX, bbRectSizeY));
-                g.DrawImage(smallBlocksAll[scb >> 2 & 0x3].Images[bigBlockIndexes[i * 4 + 1]], new Rectangle(bbRectPosX, 0, bbRectSizeX, bbRectSizeY));
-                g.DrawImage(smallBlocksAll[scb >> 4 & 0x3].Images[bigBlockIndexes[i * 4 + 2]], new Rectangle(0, bbRectPosY, bbRectSizeX, bbRectSizeY));
-                g.DrawImage(smallBlocksAll[scb >> 6 & 0x3].Images[bigBlockIndexes[i * 4 + 3]], new Rectangle(bbRectPosX, bbRectPosY, bbRectSizeX, bbRectSizeY));
+                int scb = getTTSmallBlocksColorByte(i);
+                g.DrawImage(smallBlocksAll[scb >> 0 & 0x3][bigBlocks[i].indexes[0]], new Rectangle(0, 0, bWidth, bHeight));
+                g.DrawImage(smallBlocksAll[scb >> 2 & 0x3][bigBlocks[i].indexes[1]], new Rectangle(bWidth, 0, bWidth, bHeight));
+                g.DrawImage(smallBlocksAll[scb >> 4 & 0x3][bigBlocks[i].indexes[2]], new Rectangle(0, bHeight, bWidth, bHeight));
+                g.DrawImage(smallBlocksAll[scb >> 6 & 0x3][bigBlocks[i].indexes[3]], new Rectangle(bWidth, bHeight, bWidth, bHeight));
             }
             return b;
         }

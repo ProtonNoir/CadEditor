@@ -4,6 +4,7 @@ using System.Text;
 using System.IO;
 using System.Windows.Forms;
 using System.Globalization;
+using System.Linq;
 
 using System.Drawing;
 
@@ -19,9 +20,9 @@ namespace CadEditor
         {
             try
             {
+                int size = (int)new FileInfo(Filename).Length;
                 using (FileStream f = File.OpenRead(Filename))
                 {
-                    int size = OpenFile.FileSize;
                     romdata = new byte[size];
                     f.Read(romdata, 0, size);
                 }
@@ -35,9 +36,9 @@ namespace CadEditor
             {
                 if (Dumpfile != "")
                 {
+                    int size = (int)new FileInfo(Dumpfile).Length;
                     using (FileStream f = File.OpenRead(Dumpfile))
                     {
-                        int size = OpenFile.DumpSize;
                         dumpdata = new byte[size];
                         f.Read(dumpdata, 0, size);
                     }
@@ -66,9 +67,8 @@ namespace CadEditor
                 {
                     using (FileStream f = File.OpenWrite(OpenFile.DumpName))
                     {
-                        f.Write(Globals.dumpdata, 0, OpenFile.DumpSize);
+                        f.Write(Globals.dumpdata, 0, Globals.dumpdata.Length);
                         f.Seek(0, SeekOrigin.Begin);
-
                     }
                 }
 
@@ -82,7 +82,7 @@ namespace CadEditor
             {
                 using (FileStream f = File.OpenWrite(OpenFile.FileName))
                 {
-                    f.Write(Globals.romdata, 0, OpenFile.FileSize);
+                    f.Write(Globals.romdata, 0, Globals.romdata.Length);
                     f.Seek(0, SeekOrigin.Begin);
                 }
             }
@@ -92,26 +92,6 @@ namespace CadEditor
                 return false;
             }
             return true;
-        }
-
-        public static int getTilesAddr(int id)
-        {
-            return ConfigScript.blocksOffset.beginAddr + ConfigScript.blocksOffset.recSize * id;
-        }
-
-        public static int getBigTilesAddr(int id)
-        {
-            return ConfigScript.bigBlocksOffset.beginAddr + ConfigScript.bigBlocksOffset.recSize * id;
-        }
-
-        public static int getLevelWidth(int levelNo)
-        {
-            return ConfigScript.getLevelRec(levelNo).width;
-        }
-
-        public static int getLevelHeight(int levelNo)
-        {
-            return ConfigScript.getLevelRec(levelNo).height;
         }
 
         public static int[] getScreen(OffsetRec screenOffset,  int screenIndex)
@@ -167,16 +147,6 @@ namespace CadEditor
             return upsort;
         }
 
-        public static int getLayoutAddr(int index)
-        {
-            return ConfigScript.getLevelRec(index).layoutAddr;
-        }
-
-        public static int getScrollAddr(int index)
-        {
-            return getLayoutAddr(index) + ConfigScript.getScrollsOffsetFromLayout();
-        }
-
         public static byte[] romdata;
         public static byte[] dumpdata;
         public static int CHUNKS_COUNT = 256;
@@ -215,6 +185,11 @@ namespace CadEditor
             this.recSize = recSize;
             this.width = width;
             this.height = height;
+        }
+
+        public override string ToString()
+        {
+            return String.Format("Start address:0x{0:X}. Records count:{1}, Record Size:{2}", beginAddr, recCount, recSize);
         }
 
         public int beginAddr;
@@ -403,7 +378,7 @@ namespace CadEditor
         }
     }
 
-    public struct ObjectRec
+    public struct ObjectRec : IEquatable<ObjectRec>
     {
         public ObjectRec(int type, int sx, int sy, int x, int y, Dictionary<String, int> additionalData)
             :this(type, sx, sy, x,y)
@@ -432,6 +407,23 @@ namespace CadEditor
             String formatStr = (type > 15) ? "{0:X} : ({1:X}:{2:X})" : "0{0:X} : ({1:X}:{2:X})";
             return String.Format(formatStr, type, sx << 8 | x, sy << 8 | y);
         }
+
+        bool IEquatable<ObjectRec>.Equals(ObjectRec other)
+        {
+            bool fieldsEq = (type == other.type) && (x == other.x) && (y == other.y) && (sx == other.sx) && (sy == other.sy);
+            if (!fieldsEq)
+            {
+                return false;
+            }
+            if (additionalData == null)
+            {
+                return other.additionalData == null;
+            }
+            
+            //compare all values in dictionary
+            bool addDataEq = additionalData.SequenceEqual(other.additionalData);
+            return true;
+        }
     }
 
     public enum GameType
@@ -439,7 +431,6 @@ namespace CadEditor
         Generic,
         DT2,
         TT,
-        _3E,
     };
 
     public enum MapViewType
@@ -449,4 +440,24 @@ namespace CadEditor
         ObjNumbers,
         SmallObjNumbers,
     };
+
+    public class BigBlock : IEquatable<BigBlock>
+    {
+        public BigBlock(int w, int h)
+        {
+            width = w;
+            height = h;
+            indexes = new int[getSize()];
+        }
+        public int getSize() { return width*height; }
+
+        bool IEquatable<BigBlock>.Equals(BigBlock other)
+        {
+            return (width == other.width) && (height == other.height) && (indexes.SequenceEqual(other.indexes));
+        }
+
+        public int[] indexes;
+        public int width;
+        public int height;
+    }
 }

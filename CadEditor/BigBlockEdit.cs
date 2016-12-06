@@ -5,6 +5,7 @@ using System.Data;
 using System.Drawing;
 using System.Text;
 using System.Windows.Forms;
+using System.Linq;
 using System.IO;
 
 namespace CadEditor
@@ -18,6 +19,7 @@ namespace CadEditor
 
         private void BigBlockEdit_Load(object sender, EventArgs e)
         {
+            curHierarchyLevel = 0;
             curTileset = 0;
             curVideo = 0x90;
             curPallete = 0;
@@ -27,13 +29,24 @@ namespace CadEditor
             curViewType = MapViewType.Tiles;
 
             initControls();
-        
+            reloadLevel();
+            reloadBlocksPanel();
+
+            readOnly = false; //must be read from config
+            tbbSave.Enabled = !readOnly;
+            tbbImport.Enabled = !readOnly;
+        }
+
+        protected void reloadBlocksPanel()
+        {
             blocksPanel.Controls.Clear();
             blocksPanel.SuspendLayout();
-            for (int i = 0; i < SMALL_BLOCKS_COUNT; i++)
+            int sbc = smallBlocks.Images.Count;
+            for (int i = 0; i < sbc; i++)
             {
                 var but = new Button();
-                but.Size = new Size(32, 32);
+                but.FlatStyle = FlatStyle.Flat;
+                but.Size = smallBlocks.Images[i].Size;
                 but.ImageList = smallBlocks;
                 but.ImageIndex = i;
                 but.Margin = new Padding(0);
@@ -42,28 +55,24 @@ namespace CadEditor
                 blocksPanel.Controls.Add(but);
             }
             blocksPanel.ResumeLayout();
-            prepareAxisLabels();
-            reloadLevel();
-
-            readOnly = false; //must be read from config
-            tbbSave.Enabled = !readOnly;
-            tbbImport.Enabled = !readOnly;
         }
 
         protected virtual void initControls()
         {
-            Utils.setCbItemsCount(cbVideoNo, ConfigScript.videoOffset.recCount);
-            Utils.setCbItemsCount(cbSmallBlock, ConfigScript.blocksOffset.recCount);
-            Utils.setCbItemsCount(cbPaletteNo, ConfigScript.palOffset.recCount);
-            Utils.setCbItemsCount(cbPart, Math.Max(ConfigScript.getBigBlocksCount() / 256, 1));
+            UtilsGui.setCbItemsCount(cbHierarchyLevel, ConfigScript.getbigBlocksHierarchyCount());
+            UtilsGui.setCbItemsCount(cbVideoNo, ConfigScript.videoOffset.recCount);
+            UtilsGui.setCbItemsCount(cbSmallBlock, ConfigScript.blocksOffset.recCount);
+            UtilsGui.setCbItemsCount(cbPaletteNo, ConfigScript.palOffset.recCount);
+            UtilsGui.setCbItemsCount(cbPart, Math.Max(ConfigScript.getBigBlocksCount(curHierarchyLevel) / 256, 1));
             cbTileset.Items.Clear();
-            for (int i = 0; i < ConfigScript.bigBlocksOffset.recCount; i++)
+            for (int i = 0; i < ConfigScript.bigBlocksOffsets[curTileset].recCount; i++)
             {
                 var str = String.Format("Tileset{0}", i);
                 cbTileset.Items.Add(str);
             }
 
             //generic version
+            cbHierarchyLevel.SelectedIndex = 0;
             cbTileset.SelectedIndex = formMain.CurActiveBigBlockNo;
             cbVideoNo.SelectedIndex = formMain.CurActiveVideoNo - 0x90;
             cbSmallBlock.SelectedIndex = formMain.CurActiveBlockNo;
@@ -72,32 +81,13 @@ namespace CadEditor
             cbViewType.SelectedIndex = Math.Min((int)formMain.CurActiveViewType, cbViewType.Items.Count - 1);
         }
 
-        protected void prepareAxisLabels()
-        {
-            int x = mapScreen.Location.X;
-            int y = mapScreen.Location.Y;
-            for (int i = 0; i < 16; i++)
-            {
-                var l = new Label();
-                l.Size = new System.Drawing.Size(12, 12);
-                l.Location = new Point(x-16, y+10 + i*32);
-                l.Text = String.Format("{0:X}", i);
-                this.Controls.Add(l);
-
-                var l2 = new Label();
-                l2.Size = new System.Drawing.Size(12, 12);
-                l2.Location = new Point(x+8 + i*32, y-16);
-                l2.Text = String.Format("{0:X}", i);
-                this.Controls.Add(l2);
-            }
-        }
-
         protected void reloadLevel(bool reloadBigBlocks = true)
         {
             curActiveBlock = 0;
-            setSmallBlocks();
             if (reloadBigBlocks)
               setBigBlocksIndexes();
+            setSmallBlocks();
+            reloadBlocksPanel();
             mapScreen.Invalidate();
         }
 
@@ -107,15 +97,35 @@ namespace CadEditor
             backId = curVideo;
             palId = curPallete;
 
-            var im = ConfigScript.videoNes.makeObjectsStrip((byte)backId, (byte)curTileset, (byte)palId, 1, curViewType);
-            smallBlocks.Images.Clear();
-            smallBlocks.Images.AddStrip(im);
+            if (curHierarchyLevel == 0)
+            {
+                var im = ConfigScript.videoNes.makeObjectsStrip((byte)backId, (byte)curTileset, (byte)palId, 1, curViewType);
+                smallBlocks.ImageSize = new Size(16, 16);
+                smallBlocks.Images.Clear();
+                smallBlocks.Images.AddStrip(im);
+            }
+            else
+            {
+                var ims = ConfigScript.videoNes.makeBigBlocks(backId, curTileset, ConfigScript.getBigBlocksRecursive(curHierarchyLevel-1, curSmallBlockNo), palId, curViewType, 1, 2.0f, MapViewType.Tiles, false, curHierarchyLevel-1);
+                smallBlocks.ImageSize = ims[0].Size;
+                smallBlocks.Images.Clear();
+                smallBlocks.Images.AddRange(ims);
+            }
             blocksPanel.Invalidate(true);
+
+            //prerender big blocks
+            bigBlocksImages = ConfigScript.videoNes.makeBigBlocks(backId, curTileset, bigBlockIndexes, palId, curViewType, 1, 2.0f, MapViewType.Tiles, false, curHierarchyLevel);
+            //
+            int btc = Math.Min(ConfigScript.getBigBlocksCount(curHierarchyLevel), 256);
+            int bblocksInRow = 16;
+            int bblocksInCol = (btc / bblocksInRow) + 1;
+            //
+            mapScreen.Size = new Size(bigBlocksImages[0].Width* bblocksInRow, bigBlocksImages[0].Height*bblocksInCol);
         }
 
         protected virtual void setBigBlocksIndexes()
         {
-            bigBlockIndexes = ConfigScript.getBigBlocks(curSmallBlockNo);
+            bigBlockIndexes = ConfigScript.getBigBlocksRecursive(curHierarchyLevel, curSmallBlockNo);
         }
 
         protected virtual void exportBlocks()
@@ -130,30 +140,19 @@ namespace CadEditor
             var fn = f.Filename;
             if (f.getExportType() == ExportType.Binary)
             {
-                Utils.saveDataToFile(fn, bigBlockIndexes);
+                Utils.saveDataToFile(fn, Utils.linearizeBigBlocks(bigBlockIndexes));
             }
             else
             {
                 Bitmap result = new Bitmap((int)(32 * formMain.CurScale * 256),(int)(32 * formMain.CurScale)); //need some hack for duck tales 1
+                Image[][] smallBlocksPack = new Image[1][];
+                smallBlocksPack[0] = smallBlocks.Images.Cast<Image>().ToArray();
                 using (Graphics g = Graphics.FromImage(result))
                 {
-                    for (int i = 0; i < ConfigScript.getBigBlocksCount(); i++)
+                    for (int i = 0; i < ConfigScript.getBigBlocksCount(curHierarchyLevel); i++)
                     {
                         Bitmap b;
-                        /*switch (Globals.gameType)
-                        {
-                            //todo: write code to export blocks for TinyToon
-                            //case GameTyp.TT:
-                            //    b = ConfigScript.videoNes.makeBigBlockTT(i, 64, 64, bigBlockIndexes, smallBlocksAll, smallBlocksColorBytes);
-                            //    break;
-                            case GameTyp._3E:
-                                b = ConfigScript.videoNes.makeBigBlock3E(i, 64, 64, bigBlockIndexes, smallBlocks);
-                                break;
-                            default:
-                                b = ConfigScript.videoNes.makeBigBlock(i, 64, 64, bigBlockIndexes, smallBlocks);
-                                break;
-                        }*/
-                        b = ConfigScript.videoNes.makeBigBlock(i, 64, 64, bigBlockIndexes, smallBlocks);
+                        b = ConfigScript.videoNes.makeBigBlock(i, bigBlockIndexes, smallBlocksPack);
                         g.DrawImage(b, new Point((int)(32 * formMain.CurScale * i), 0));
                     }
                 }
@@ -162,47 +161,88 @@ namespace CadEditor
         }
 
         protected int SMALL_BLOCKS_COUNT = 256;
-        protected byte[] bigBlockIndexes;
+        protected BigBlock[] bigBlockIndexes;
+
+        //hardcode
+        private int getBlockWidth()
+        {
+            return smallBlocks.Images[0].Size.Width;
+        }
+
+        private int getBlockHeight()
+        {
+            return smallBlocks.Images[0].Size.Height;
+        }
 
         protected void mapScreen_Paint(object sender, PaintEventArgs e)
         {
-            int addIndexes = curPart * 256 * 4;
+            int addIndexes = curPart * 256;
             Graphics g = e.Graphics;
-            int btc = Math.Min(ConfigScript.getBigBlocksCount(), 256);
+            int btc = Math.Min(ConfigScript.getBigBlocksCount(curHierarchyLevel), 256);
+            int bblocksInRow = 16;
+            int bblocksInCol = (btc / bblocksInRow) + 1;
+
+            var testBBlock = bigBlockIndexes[0];
+            int bWidth = getBlockWidth();
+            int bHeight = getBlockHeight();
+            int bbWidth  =  bWidth  * testBBlock.width;
+            int bbHeight =  bHeight * testBBlock.height;
+
+            var pen = new Pen(Brushes.Magenta);
+
             for (int i = 0; i < btc; i++)
             {
-                int xb = i%16;
-                int yb = i/16;
-                g.DrawImage(smallBlocks.Images[bigBlockIndexes[addIndexes+i * 4]], new Rectangle(xb * 32, yb * 32, 16, 16));
-                g.DrawImage(smallBlocks.Images[bigBlockIndexes[addIndexes+i * 4 + 1]], new Rectangle(xb * 32 + 16, yb * 32, 15, 16));
-                g.DrawImage(smallBlocks.Images[bigBlockIndexes[addIndexes+i * 4 + 2]], new Rectangle(xb * 32, yb * 32 + 16, 16, 15));
-                g.DrawImage(smallBlocks.Images[bigBlockIndexes[addIndexes+i * 4 + 3]], new Rectangle(xb * 32 + 16, yb * 32 + 16, 15, 15));
+                int xb = i % bblocksInRow;
+                int yb = i / bblocksInRow;
+                var rr = new Rectangle(xb * bbWidth, yb * bbHeight, bbWidth, bbHeight);
+                g.DrawImage(bigBlocksImages[addIndexes + i], rr);
+                g.DrawRectangle(pen, rr);
             }
         }
 
         protected void mapScreen_MouseClick(object sender, MouseEventArgs e)
         {
-            int addIndexes = curPart * 256 * 4;
+            int addIndexes = curPart * 256;
             dirty = true; updateSaveVisibility();
-            int bx = e.X / 32;
-            int by = e.Y / 32;
-            int dx = (e.X % 32) / 16;
-            int dy = (e.Y % 32) / 16;
-            int ind = (by * 16 + bx) * 4 + (dy * 2 + dx);
-            int actualIndex = addIndexes + ind;
+
+            int btc = Math.Min(ConfigScript.getBigBlocksCount(curHierarchyLevel), 256);
+            int bblocksInRow = 16;
+            int bblocksInCol = (btc / bblocksInRow) + 1;
+
+            var testBBlock = bigBlockIndexes[0];
+            int bWidth = getBlockWidth();
+            int bHeight = getBlockHeight();
+            int bbWidth  =  bWidth  * testBBlock.width;
+            int bbHeight =  bHeight * testBBlock.height;
+
+            int bx = e.X / bbWidth;
+            int by = e.Y / bbHeight;
+            int dx = (e.X % bbWidth) / bWidth;
+            int dy = (e.Y % bbHeight) / bHeight;
+            int bigBlockIndex = by * bblocksInRow + bx;
+            int insideIndex   = dy * testBBlock.width + dx;
+            //prevent out in bounds
+            if (bigBlockIndex >= btc)
+            {
+                return;
+            }
+            int actualIndex = addIndexes + bigBlockIndex;
             if (e.Button == MouseButtons.Left)
             {
                 if (actualIndex < bigBlockIndexes.Length)
-                    bigBlockIndexes[actualIndex] = (byte)curActiveBlock;
+                    bigBlockIndexes[actualIndex].indexes[insideIndex] = curActiveBlock;
                 mapScreen.Invalidate();
             }
             else
             {
                 if (actualIndex < bigBlockIndexes.Length)
-                    curActiveBlock = bigBlockIndexes[actualIndex];
+                    curActiveBlock = bigBlockIndexes[actualIndex].indexes[insideIndex];
                 pbActive.Image = smallBlocks.Images[curActiveBlock];
                 lbActive.Text = String.Format("({0:X})", curActiveBlock);
             }
+            //fix current big blocks image
+            var imss = new Image[1][] { smallBlocks.Images.Cast<Image>().ToArray() };
+            bigBlocksImages[actualIndex] = ConfigScript.videoNes.makeBigBlock(actualIndex, bigBlockIndexes, imss);
         }
 
         protected void buttonObjClick(Object button, EventArgs e)
@@ -216,6 +256,7 @@ namespace CadEditor
         protected int curActiveBlock;
         protected int curTileset;
         protected int curSmallBlockNo;
+        protected int curHierarchyLevel;
 
         //generic
         protected int curVideo;
@@ -228,6 +269,8 @@ namespace CadEditor
         protected bool readOnly;
 
         protected FormMain formMain;
+
+        Image[] bigBlocksImages; //prerendered for faster rendering;
 
         protected void updateSaveVisibility()
         {
@@ -242,12 +285,13 @@ namespace CadEditor
                 cbPaletteNo.SelectedIndex == -1 ||
                 cbPart.SelectedIndex == -1 ||
                 cbViewType.SelectedIndex == -1 || 
-                cbSmallBlock.SelectedIndex == -1
+                cbSmallBlock.SelectedIndex == -1 ||
+                cbHierarchyLevel.SelectedIndex == -1
                 )
             {
                 return;
             }
-            if (!readOnly && dirty && sender == cbTileset)
+            if (!readOnly && dirty && (sender == cbTileset || sender == cbHierarchyLevel))
             {
                 DialogResult dr = MessageBox.Show("Tiles was changed. Do you want to save current tileset?", "Save", MessageBoxButtons.YesNoCancel);
                 if (dr == DialogResult.Cancel)
@@ -271,6 +315,7 @@ namespace CadEditor
             }
 
             //generic version
+            curHierarchyLevel = cbHierarchyLevel.SelectedIndex;
             curTileset = cbTileset.SelectedIndex;
             curSmallBlockNo = cbSmallBlock.SelectedIndex;
             curViewType = (MapViewType)cbViewType.SelectedIndex;
@@ -278,8 +323,8 @@ namespace CadEditor
             curVideo = cbVideoNo.SelectedIndex + 0x90;
             curPallete = cbPaletteNo.SelectedIndex;
             curPart = cbPart.SelectedIndex;
-            Utils.setCbItemsCount(cbPart, Math.Max(ConfigScript.getBigBlocksCount() / 256, 1));
-            Utils.setCbIndexWithoutUpdateLevel(cbPart, cbLevelPair_SelectedIndexChanged, curPart);
+            UtilsGui.setCbItemsCount(cbPart, Math.Max(ConfigScript.getBigBlocksCount(curHierarchyLevel) / 256, 1));
+            UtilsGui.setCbIndexWithoutUpdateLevel(cbPart, cbLevelPair_SelectedIndexChanged, curPart);
             reloadLevel();
         }
 
@@ -288,6 +333,10 @@ namespace CadEditor
             cbTileset.SelectedIndexChanged -= cbLevelPair_SelectedIndexChanged;
             cbTileset.SelectedIndex = curTileset;
             cbTileset.SelectedIndexChanged += cbLevelPair_SelectedIndexChanged;
+
+            cbHierarchyLevel.SelectedIndexChanged -= cbLevelPair_SelectedIndexChanged;
+            cbHierarchyLevel.SelectedIndex = curTileset;
+            cbHierarchyLevel.SelectedIndexChanged += cbLevelPair_SelectedIndexChanged;
         }
 
         protected void btSave_Click(object sender, EventArgs e)
@@ -297,7 +346,7 @@ namespace CadEditor
 
         protected bool saveToFile()
         {
-            ConfigScript.setBigBlocks(curSmallBlockNo, bigBlockIndexes);
+            ConfigScript.setBigBlocksHierarchy(curHierarchyLevel, curSmallBlockNo, bigBlockIndexes);
             dirty = !Globals.flushToFile();
             updateSaveVisibility();
             return !dirty;
@@ -317,8 +366,14 @@ namespace CadEditor
         {
             if (MessageBox.Show("Are you sure want to clear all blocks?", "Clear", MessageBoxButtons.YesNo) != DialogResult.Yes)
                 return;
-            for (int i = 0; i < ConfigScript.getBigBlocksCount() * 4; i++)
-                bigBlockIndexes[i] = 0;
+            for (int i = 0; i < bigBlockIndexes.Length; i++)
+            {
+                var bb = bigBlockIndexes[i];
+                for (int j = 0; j < bb.indexes.Length; j++)
+                {
+                    bb.indexes[j] = 0;
+                }
+            }
             dirty = true;
             updateSaveVisibility();
             mapScreen.Invalidate();
@@ -339,7 +394,7 @@ namespace CadEditor
             var fn = f.Filename;
             var data = Utils.loadDataFromFile(fn);
             //duck tales 2 has other format
-            bigBlockIndexes = data;
+            bigBlockIndexes = Utils.unlinearizeBigBlocks(data, 2,2);
             reloadLevel(false);
             dirty = true;
             updateSaveVisibility();
@@ -353,11 +408,22 @@ namespace CadEditor
         protected void mapScreen_MouseMove(object sender, MouseEventArgs e)
         {
             int addIndexesText = curPart * 256;
-            int bx = e.X / 32;
-            int by = e.Y / 32;
-            int dx = (e.X % 32) / 16;
-            int dy = (e.Y % 32) / 16;
-            int ind = ((by * 16 + bx) * 4 + (dy * 2 + dx)) / 4;
+
+            int btc = Math.Min(ConfigScript.getBigBlocksCount(curHierarchyLevel), 256);
+            int bblocksInRow = 16;
+            int bblocksInCol = (btc / bblocksInRow) + 1;
+
+            var testBBlock = bigBlockIndexes[0];
+            int bWidth = getBlockWidth();
+            int bHeight = getBlockHeight();
+            int bbWidth  =  bWidth  * testBBlock.width;
+            int bbHeight =  bHeight * testBBlock.height;
+
+            int bx = e.X / bbWidth;
+            int by = e.Y / bbHeight;
+            int dx = (e.X % bbWidth) / bWidth;
+            int dy = (e.Y % bbHeight) / bHeight;
+            int ind = ((by * bblocksInRow + bx) * testBBlock.getSize() + (dy * testBBlock.width + dx)) / testBBlock.getSize();
             if (ind > 255)
             {
                 lbBigBlockNo.Text = "()";
@@ -365,7 +431,7 @@ namespace CadEditor
             else
             {
                 int actualIndex = addIndexesText + ind;
-                lbBigBlockNo.Text = String.Format("({0:X})", addIndexesText);
+                lbBigBlockNo.Text = String.Format("({0:X})", actualIndex);
             }
         }
 

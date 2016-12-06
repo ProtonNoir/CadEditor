@@ -1,13 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
 using System.Drawing;
-using System.Text;
 using System.Windows.Forms;
 using System.IO;
-using System.Linq;
 using Newtonsoft.Json;
+using System.Linq;
 
 namespace CadEditor
 {
@@ -30,13 +27,15 @@ namespace CadEditor
         private int curHeight = 1;
         private float curScale = 1.0f;
 
+        private int curActiveObjectListIndex = 0;
+
         private bool bindToAxis = false;
         private bool useBigPictures = false;
 
         private ToolType curTool = ToolType.Create;
 
         private LevelLayerData curLevelLayerData = new LevelLayerData();
-        private List<ObjectRec> objects = new List<ObjectRec>();
+        private List<ObjectList> objectLists = new List<ObjectList>();
         private bool dirty = false;
         private bool readOnly = false;
 
@@ -55,8 +54,8 @@ namespace CadEditor
 
         private void reloadLevelLayerData(bool resetScreenPos)
         {
-            curWidth = Globals.getLevelWidth(curActiveLayout);
-            curHeight = Globals.getLevelHeight(curActiveLayout);
+            curWidth = ConfigScript.getLevelWidth(curActiveLayout);
+            curHeight = ConfigScript.getLevelHeight(curActiveLayout);
             curActiveLayout = cbLayoutNo.SelectedIndex;
             curVideoNo = cbVideoNo.SelectedIndex + 0x90;
             curBigBlockNo = cbBigBlockNo.SelectedIndex;
@@ -90,7 +89,7 @@ namespace CadEditor
                 if (ConfigScript.isUseSegaGraphics())
                   bigImages = makeSegaBigBlocks();
                 else
-                  bigImages = ConfigScript.videoNes.makeBigBlocks(curVideoNo, 0, curBigBlockNo, curBlockNo, curPaletteNo, MapViewType.Tiles, curScale, 32, 32, curScale, MapViewType.Tiles, formMain.ShowAxis);
+                  bigImages = ConfigScript.videoNes.makeBigBlocks(curVideoNo, curBigBlockNo, curBlockNo, curPaletteNo, MapViewType.Tiles, curScale, curScale, MapViewType.Tiles, formMain.ShowAxis, ConfigScript.getbigBlocksHierarchyCount()-1);
                 bigBlocks.Images.AddRange(bigImages);
             }
         }
@@ -98,10 +97,10 @@ namespace CadEditor
         //copy-paste
         private Image[] makeSegaBigBlocks()
         {
-            byte[] mapping = ConfigScript.getBigBlocks(curBigBlockNo);
+            byte[] mapping = ConfigScript.getSegaMapping(curBigBlockNo);
             byte[] videoTiles = ConfigScript.getVideoChunk(curVideoNo);
             byte[] pal = ConfigScript.getPal(curPaletteNo);
-            int count = ConfigScript.getBigBlocksCount();
+            int count = ConfigScript.getBigBlocksCount(ConfigScript.getbigBlocksHierarchyCount()-1);
             return ConfigScript.videoSega.makeBigBlocks(mapping, videoTiles, pal, count, curScale, MapViewType.Tiles, formMain.ShowAxis);
         }
 
@@ -131,7 +130,7 @@ namespace CadEditor
             bool reloadObjects = realReload;
             if (!readOnly && realReload)
             {
-                if (!Utils.askToSave(ref dirty, saveToFile, returnCbLevelIndex))
+                if (!UtilsGui.askToSave(ref dirty, saveToFile, returnCbLevelIndex))
                     return;
             }
            
@@ -140,8 +139,14 @@ namespace CadEditor
             cbLayoutNo.Items.Clear();
             foreach (var lr in ConfigScript.levelRecs)
                 cbLayoutNo.Items.Add(String.Format("{0}:0x{1:X} ({2}x{3})", lr.name, lr.layoutAddr, lr.width, lr.height));
-            Utils.setCbIndexWithoutUpdateLevel(cbLayoutNo, cbLevel_SelectedIndexChanged, curActiveLayout);
+            UtilsGui.setCbIndexWithoutUpdateLevel(cbLayoutNo, cbLevel_SelectedIndexChanged, curActiveLayout);
+
+            //reload screens
+            screens = Utils.setScreens(getLevelRecForGameType().levelNo);
+            resetObjCheckBoxes();
+
             reloadLevel(reloadObjects);
+            resizeMapScreen();
             mapScreen.Invalidate();
         }
 
@@ -150,7 +155,7 @@ namespace CadEditor
             screens = Utils.setScreens(getLevelRecForGameType().levelNo);
             if (ConfigScript.usePicturesInstedBlocks)
             {
-                Utils.setBlocks(bigBlocks, 2, 32,32, MapViewType.Tiles, formMain.ShowAxis);
+                UtilsGDI.setBlocks(bigBlocks, 2, 32,32, MapViewType.Tiles, formMain.ShowAxis);
             }
 
             cbDatas = new ComboBox[] { cbD0, cbD1, cbD2, cbD3, cbD4, cbD5 };
@@ -159,55 +164,65 @@ namespace CadEditor
             reloadPictures();
             fillObjPanel();
 
-            int coordXCount = (ConfigScript.getMaxObjCoordX() != -1) ? ConfigScript.getMaxObjCoordX() : ConfigScript.getScreenWidth(getLevelRecForGameType().levelNo) * 32;
-            int coordYCount = (ConfigScript.getMaxObjCoordY() != -1) ? ConfigScript.getMaxObjCoordY() : ConfigScript.getScreenHeight(getLevelRecForGameType().levelNo) * 32;
-            int objType = (ConfigScript.getMaxObjType() != -1) ? ConfigScript.getMaxObjType() : 256;
-            int minCoordX = ConfigScript.getMinObjCoordX();
-            int minCoordY = ConfigScript.getMinObjCoordY();
-            int minObjType = ConfigScript.getMinObjType();
-            if (!ConfigScript.getScreenVertical())
-            {
-                Utils.setCbItemsCount(cbCoordX, coordXCount - minCoordX, minCoordX, true);
-                Utils.setCbItemsCount(cbCoordY, coordYCount - minCoordY, minCoordY, true);
-            }
-            else
-            {
-                Utils.setCbItemsCount(cbCoordY, coordXCount - minCoordX, minCoordX, true);
-                Utils.setCbItemsCount(cbCoordX, coordYCount - minCoordY, minCoordY, true);
-            }
-            Utils.setCbItemsCount(cbObjType, objType - minObjType, minObjType, true);
+            resetObjCheckBoxes();
 
-            Utils.setCbItemsCount(cbVideoNo, ConfigScript.videoOffset.recCount);
-            Utils.setCbItemsCount(cbBigBlockNo, ConfigScript.bigBlocksOffset.recCount);
-            Utils.setCbItemsCount(cbBlockNo, ConfigScript.blocksOffset.recCount);
-            Utils.setCbItemsCount(cbPaletteNo, ConfigScript.palOffset.recCount);
-            Utils.setCbItemsCount(cbScale, 2, 1);
-            Utils.setCbIndexWithoutUpdateLevel(cbVideoNo, cbLevel_SelectedIndexChanged, formMain.CurActiveVideoNo - 0x90);
-            Utils.setCbIndexWithoutUpdateLevel(cbBlockNo, cbLevel_SelectedIndexChanged, formMain.CurActiveBlockNo);
-            Utils.setCbIndexWithoutUpdateLevel(cbBigBlockNo, cbLevel_SelectedIndexChanged, formMain.CurActiveBigBlockNo);
-            Utils.setCbIndexWithoutUpdateLevel(cbPaletteNo, cbLevel_SelectedIndexChanged, formMain.CurActivePalleteNo);
-            Utils.setCbIndexWithoutUpdateLevel(cbTool, cbTool_SelectedIndexChanged);
-            Utils.setCbIndexWithoutUpdateLevel(cbScale, cbLevel_SelectedIndexChanged, 1);
+            UtilsGui.setCbItemsCount(cbVideoNo, ConfigScript.videoOffset.recCount);
+            UtilsGui.setCbItemsCount(cbBigBlockNo, ConfigScript.bigBlocksOffsets[0].recCount);
+            UtilsGui.setCbItemsCount(cbBlockNo, ConfigScript.blocksOffset.recCount);
+            UtilsGui.setCbItemsCount(cbPaletteNo, ConfigScript.palOffset.recCount);
+            UtilsGui.setCbItemsCount(cbScale, 2, 1);
+            UtilsGui.setCbIndexWithoutUpdateLevel(cbVideoNo, cbLevel_SelectedIndexChanged, formMain.CurActiveVideoNo - 0x90);
+            UtilsGui.setCbIndexWithoutUpdateLevel(cbBlockNo, cbLevel_SelectedIndexChanged, formMain.CurActiveBlockNo);
+            UtilsGui.setCbIndexWithoutUpdateLevel(cbBigBlockNo, cbLevel_SelectedIndexChanged, formMain.CurActiveBigBlockNo);
+            UtilsGui.setCbIndexWithoutUpdateLevel(cbPaletteNo, cbLevel_SelectedIndexChanged, formMain.CurActivePalleteNo);
+            UtilsGui.setCbIndexWithoutUpdateLevel(cbTool, cbTool_SelectedIndexChanged);
+            UtilsGui.setCbIndexWithoutUpdateLevel(cbScale, cbLevel_SelectedIndexChanged, 1);
             cbLayoutNo.Items.Clear();
             foreach (var lr in ConfigScript.levelRecs)
                 cbLayoutNo.Items.Add(String.Format("{0}:0x{1:X} ({2}x{3})", lr.name, lr.layoutAddr, lr.width, lr.height));
-            Utils.setCbIndexWithoutUpdateLevel(cbLayoutNo, cbLevel_SelectedIndexChanged);
+            UtilsGui.setCbIndexWithoutUpdateLevel(cbLayoutNo, cbLevel_SelectedIndexChanged);
 
             readOnly = ConfigScript.setObjectsFunc == null;
             btSave.Enabled = !readOnly;
             lbReadOnly.Visible = readOnly;
 
             btSort.Visible = ConfigScript.sortObjectsFunc != null;
+            resizeMapScreen();
 
+            UtilsGui.setCbItemsCount(cbBigObjectNo, 256, 0, true);
+            cbLevel_SelectedIndexChanged(cbLayoutNo, new EventArgs());
+        }
+
+        private void resetObjCheckBoxes()
+        {
+            int coordXCount = ConfigScript.getScreenWidth(getLevelRecForGameType().levelNo) * 32;
+            int coordYCount = ConfigScript.getScreenHeight(getLevelRecForGameType().levelNo) * 32;
+            int objType = (ConfigScript.getMaxObjType() != -1) ? ConfigScript.getMaxObjType() : 256;
+            int minCoordX = 0;
+            int minCoordY = 0;
+            int minObjType = ConfigScript.getMinObjType();
+            if (!ConfigScript.getScreenVertical())
+            {
+                UtilsGui.setCbItemsCount(cbCoordX, coordXCount - minCoordX, minCoordX, true);
+                UtilsGui.setCbItemsCount(cbCoordY, coordYCount - minCoordY, minCoordY, true);
+            }
+            else
+            {
+                UtilsGui.setCbItemsCount(cbCoordY, coordXCount - minCoordX, minCoordX, true);
+                UtilsGui.setCbItemsCount(cbCoordX, coordYCount - minCoordY, minCoordY, true);
+            }
+            UtilsGui.setCbItemsCount(cbObjType, objType - minObjType, minObjType, true);
+        }
+
+        private void resizeMapScreen()
+        {
             int blockWidth = ConfigScript.getBlocksPicturesWidth();
             int scrLevelNo = getLevelRecForGameType().levelNo;
             if (ConfigScript.getScreenVertical())
                 mapScreen.Size = new Size(ConfigScript.getScreenHeight(scrLevelNo) * blockWidth * 2, (ConfigScript.getScreenWidth(scrLevelNo) + 2) * 64);
             else
                 mapScreen.Size = new Size((ConfigScript.getScreenWidth(scrLevelNo) + 2) * blockWidth * 2, ConfigScript.getScreenHeight(scrLevelNo) * 64);
-
-            Utils.setCbItemsCount(cbBigObjectNo, 256, 0, true);
-            cbLevel_SelectedIndexChanged(cbLayoutNo, new EventArgs());
+            //mapScreen.Size = back3.Size;
         }
 
         private void cbScreenNo_SelectedIndexChanged(object sender, EventArgs e)
@@ -229,6 +244,7 @@ namespace CadEditor
             for (int i = 0; i < objectSprites.Images.Count; i++)
             {
                 var but = new Button();
+                but.FlatStyle = FlatStyle.Flat;
                 but.Size = new Size(32, 32);
                 but.ImageList = objectSprites;
                 but.ImageIndex = i;
@@ -256,16 +272,17 @@ namespace CadEditor
 
         private void deleteSelected()
         {
+            var activeObjectList = objectLists[curActiveObjectListIndex];
             var toRemove = new List<ObjectRec>();
             for (int i = 0; i < lvObjects.SelectedIndices.Count; i++)
             {
                 int index = lvObjects.SelectedIndices[i];
                 if (index == -1)
                     continue;
-                toRemove.Add(objects[index]);
+                toRemove.Add(activeObjectList.objects[index]);
             }
             for (int i = 0; i < toRemove.Count; i++)
-                objects.Remove(toRemove[i]);
+                activeObjectList.objects.Remove(toRemove[i]);
             fillObjectsListBox();
 
             btDelete.Enabled = false;
@@ -288,24 +305,28 @@ namespace CadEditor
 
         private void setObjects()
         {
-            objects = ConfigScript.getObjects(getActiveLayoutNo());
+            objectLists = ConfigScript.getObjects(getActiveLayoutNo());
             updateAddDataVisible(0);
+            cbObjectList.Items.Clear();
+            for (int i = 0; i < objectLists.Count; i++)
+                cbObjectList.Items.Add(objectLists[i].name);
             fillObjectsListBox();
         }
 
         public void updateAddDataVisible(int index)
         {
-            pnAddData.Visible = objects.Count > index && objects[index].additionalData != null;
+            var activeObjectList = objectLists[curActiveObjectListIndex];
+            pnAddData.Visible = activeObjectList.objects.Count > index && activeObjectList.objects[index].additionalData != null;
             if (pnAddData.Visible)
             {
                 int addDataCount = 0;
-                foreach (var addData in objects[index].additionalData)
+                foreach (var addData in activeObjectList.objects[index].additionalData)
                 {
                     var key = addData.Key;
                     lbDatas[addDataCount].Text = key;
                     cbDatas[addDataCount].Tag = key;
                     cbDatas[addDataCount].SelectedIndexChanged -= cbCoordX_SelectedIndexChanged;
-                    Utils.setCbItemsCount(cbDatas[addDataCount], 256, 0, true);
+                    UtilsGui.setCbItemsCount(cbDatas[addDataCount], 256, 0, true);
                     cbDatas[addDataCount].SelectedIndexChanged += cbCoordX_SelectedIndexChanged;
                     cbDatas[addDataCount].Visible = true;
                     lbDatas[addDataCount].Visible = true;
@@ -322,13 +343,14 @@ namespace CadEditor
 
         private void fillObjectsListBox()
         {
+            var activeObjectList = objectLists[curActiveObjectListIndex];
             lvObjects.Items.Clear();
-            for (int i = 0; i < objects.Count; i++)
-                lvObjects.Items.Add(new ListViewItem(makeStringForObject(objects[i]), objects[i].type));
+            for (int i = 0; i < activeObjectList.objects.Count; i++)
+                lvObjects.Items.Add(new ListViewItem(makeStringForObject(activeObjectList.objects[i]), activeObjectList.objects[i].type));
             cbCoordX.Enabled = false;
             cbCoordY.Enabled = false;
             cbObjType.Enabled = false;
-            lbObjectsCount.Text = String.Format("Objects count: {0}/{1}", lvObjects.Items.Count, getLevelRecForGameType().objCount);
+            lbObjectsCount.Text = String.Format("objects count: {0}/{1}", lvObjects.Items.Count, getLevelRecForGameType().objCount);
         }
 
         private int coordToScreenNo(ObjectRec obj)
@@ -348,17 +370,18 @@ namespace CadEditor
 
         private void btClearObjs_Click(object sender, EventArgs e)
         {
+            var activeObjectList = objectLists[curActiveObjectListIndex];
             if (MessageBox.Show("Do you really want to delete all objects at screen?", "Confirm", MessageBoxButtons.YesNo) != DialogResult.Yes)
                 return;
             List<ObjectRec> toRemove = new List<ObjectRec>();
-            for (int i = 0; i < objects.Count; i++)
+            for (int i = 0; i < activeObjectList.objects.Count; i++)
             {
-                int screenNo = coordToScreenNo(objects[i]);
+                int screenNo = coordToScreenNo(activeObjectList.objects[i]);
                 if (screenNo == curActiveScreen)
-                    toRemove.Add(objects[i]);
+                    toRemove.Add(activeObjectList.objects[i]);
             }
             for (int i = 0; i < toRemove.Count; i++)
-                objects.Remove(toRemove[i]);
+                activeObjectList.objects.Remove(toRemove[i]);
 
             fillObjectsListBox();
             mapScreen.Invalidate();
@@ -394,6 +417,8 @@ namespace CadEditor
             return new Point(curActiveScreen % width, curActiveScreen / width);
         }
 
+        //Image back3 = Image.FromFile("back_tunnel_3.png");
+
         private void paintBack(Graphics g)
         {
             //temp hack for compatibility. for cad-games scrNo -= 1 !!!
@@ -404,44 +429,53 @@ namespace CadEditor
                 int scrLevelNo = getLevelRecForGameType().levelNo;
                 int width = ConfigScript.getScreenWidth(scrLevelNo);
                 int height = ConfigScript.getScreenHeight(scrLevelNo);
-                var visibleRect = Utils.getVisibleRectangle(pnView, mapScreen);
-                MapEditor.Render(g, bigBlocks, visibleRect, indexes, null, curScale, true, false, false, 0, width, height, ConfigScript.getScreenVertical());
+                var visibleRect = UtilsGui.getVisibleRectangle(pnView, mapScreen);
+                MapEditor.Render(g, bigBlocks, formMain.BlockWidth, formMain.BlockHeight, visibleRect, indexes, null, curScale, true, false, false, 0, width, height, ConfigScript.getScreenVertical());
                 ConfigScript.renderToMainScreen(g, (int)curScale);
             }
             else
             {
                 g.FillRectangle(Brushes.Black, new Rectangle(0, 0, 512, 512));
             }
+
+            //mapScreen.Image = back3;
         }
 
         private void mapScreen_Paint(object sender, PaintEventArgs e)
         {
-            //if (ConfigScript.usePicturesInstedBlocks)
-            paintBack(e.Graphics);
             var g = e.Graphics;
-            var selectedInds = lvObjects.SelectedIndices;
-            for (int i = 0; i < objects.Count; i++)
+            paintBack(g);
+            for (int objListIndex = 0; objListIndex < objectLists.Count; objListIndex++)
             {
-                var curObject = objects[i];
-                int screenIndex = coordToScreenNo(curObject);
-                if (screenIndex == curActiveScreen)
+                var activeObjectList = objectLists[objListIndex];
+                //if (ConfigScript.usePicturesInstedBlocks)
+                var selectedInds = lvObjects.SelectedIndices;
+                for (int i = 0; i < activeObjectList.objects.Count; i++)
                 {
-                    if (!useBigPictures)
-                        ConfigScript.drawObject(g, curObject, selectedInds.Contains(i), curScale, objectSprites);
-                    else
-                        ConfigScript.drawObjectBig(g, curObject, selectedInds.Contains(i), curScale, objectSpritesBig);
+                    var curObject = activeObjectList.objects[i];
+                    int screenIndex = coordToScreenNo(curObject);
+                    if (screenIndex == curActiveScreen)
+                    {
+                        bool inactive = objListIndex != curActiveObjectListIndex;
+                        bool selected = !inactive && selectedInds.Contains(i);
+                        if (!useBigPictures)
+                            ConfigScript.drawObject(g, curObject, curActiveObjectListIndex, selected, curScale, objectSprites, inactive);
+                        else
+                            ConfigScript.drawObjectBig(g, curObject, curActiveObjectListIndex, selected, curScale, objectSpritesBig, inactive);
+                    }
                 }
             }
         }
 
         private void cbCoordX_SelectedIndexChanged(object sender, EventArgs e)
         {
+            var activeObjectList = objectLists[curActiveObjectListIndex];
             if (lvObjects.SelectedItems.Count != 1)
                 return;
             int index = lvObjects.SelectedItems[0].Index;
-            var obj = objects[index];
-            int minCoordX = ConfigScript.getMinObjCoordX();
-            int minCoordY = ConfigScript.getMinObjCoordY();
+            var obj = activeObjectList.objects[index];
+            int minCoordX = 0;
+            int minCoordY = 0;
             int minObjType = ConfigScript.getMinObjType();
             obj.x = cbCoordX.SelectedIndex + minCoordX;
             obj.y = cbCoordY.SelectedIndex + minCoordY;
@@ -453,11 +487,11 @@ namespace CadEditor
                     if (cb.Visible)  //enable
                     {
                         var key = (string)cb.Tag;
-                        objects[index].additionalData[key] = cb.SelectedIndex;
+                        activeObjectList.objects[index].additionalData[key] = cb.SelectedIndex;
                     }
                 }
             }
-            objects[index] = obj;
+            activeObjectList.objects[index] = obj;
             lvObjects.SelectedItems[0].ImageIndex = obj.type;
             lvObjects.SelectedItems[0].Text = makeStringForObject(obj);
             mapScreen.Invalidate();
@@ -467,18 +501,17 @@ namespace CadEditor
         {
             var romFname = OpenFile.FileName;
             LevelRec lr = getLevelRecForGameType();
-            //write objects
-            int addrBase = lr.objectsBeginAddr;
+            //TODO: return free space checking
+            /*int addrBase = lr.objectsBeginAddr;
             int objCount = lr.objCount;
-             
-            if (objects.Count > objCount)
+            if (activeObjectList.objects.Count > objCount)
             {
-                MessageBox.Show(String.Format("Too many objects in level ({0}). Maximum: {1}", objects.Count, lr.objCount));
+                MessageBox.Show(String.Format("Too many objects in level ({0}). Maximum: {1}", activeObjectList.objects.Count, lr.objCount));
                 return false;
-            }
+            }*/
             try
             {
-                ConfigScript.setObjects(getActiveLayoutNo(), objects);
+                ConfigScript.setObjects(getActiveLayoutNo(), objectLists);
             }
             catch (IndexOutOfRangeException ex)
             {
@@ -497,9 +530,9 @@ namespace CadEditor
             {
                 using (TextWriter f = new StreamWriter(fname))
                 {
-                    for (int i = 0; i < objects.Count; i++)
+                    for (int i = 0; i < objectLists.Count; i++)
                     {
-                        var obj = objects[i];
+                        var obj = objectLists[i];
                         string json = JsonConvert.SerializeObject(obj);
                         f.WriteLine(json);
                     }
@@ -517,7 +550,7 @@ namespace CadEditor
 
         private bool loadFromJsonFile(string fname)
         {
-            objects.Clear();
+            objectLists.Clear();
             try
             {
                 using (TextReader f = new StreamReader(fname))
@@ -525,8 +558,8 @@ namespace CadEditor
                     string line;
                     while ((line = f.ReadLine()) != null)
                     {
-                        var obj = JsonConvert.DeserializeObject<ObjectRec>(line);
-                        objects.Add(obj);
+                        var obj = JsonConvert.DeserializeObject<ObjectList>(line);
+                        objectLists.Add(obj);
                     }
                 }
             }
@@ -550,25 +583,27 @@ namespace CadEditor
             btSortDown.Enabled = false;
             btSortUp.Enabled = false;
 
+            var activeObjectList = objectLists[curActiveObjectListIndex];
+
             if (selectedOne)
             {
                 int index = lvObjects.SelectedItems[0].Index;
-                int minCoordX = ConfigScript.getMinObjCoordX();
-                int minCoordY = ConfigScript.getMinObjCoordY();
+                int minCoordX = 0;
+                int minCoordY = 0;
                 int minObjType = ConfigScript.getMinObjType();
                 try
-                {
-                    Utils.setCbIndexWithoutUpdateLevel(cbCoordX, cbCoordX_SelectedIndexChanged, objects[index].x - minCoordX);
-                    Utils.setCbIndexWithoutUpdateLevel(cbCoordY, cbCoordX_SelectedIndexChanged, objects[index].y - minCoordY);
-                    Utils.setCbIndexWithoutUpdateLevel(cbObjType, cbCoordX_SelectedIndexChanged, objects[index].type - minObjType);
-                    if (objects[index].additionalData != null)
+                { 
+                    UtilsGui.setCbIndexWithoutUpdateLevel(cbCoordX, cbCoordX_SelectedIndexChanged, activeObjectList.objects[index].x - minCoordX);
+                    UtilsGui.setCbIndexWithoutUpdateLevel(cbCoordY, cbCoordX_SelectedIndexChanged, activeObjectList.objects[index].y - minCoordY);
+                    UtilsGui.setCbIndexWithoutUpdateLevel(cbObjType, cbCoordX_SelectedIndexChanged, activeObjectList.objects[index].type - minObjType);
+                    if (activeObjectList.objects[index].additionalData != null)
                     {
                         updateAddDataVisible(index);
                         int addDataCount = 0;
-                        foreach (var addData in objects[index].additionalData)
+                        foreach (var addData in activeObjectList.objects[index].additionalData)
                         {
                    
-                            Utils.setCbIndexWithoutUpdateLevel(cbDatas[addDataCount], cbCoordX_SelectedIndexChanged, addData.Value);
+                            UtilsGui.setCbIndexWithoutUpdateLevel(cbDatas[addDataCount], cbCoordX_SelectedIndexChanged, addData.Value);
                             cbDatas[addDataCount].Enabled = true;
                             if (++addDataCount == cbDatas.Length)
                                 break;
@@ -580,7 +615,7 @@ namespace CadEditor
                     cbCoordX.Enabled = false;
                     cbCoordY.Enabled = false;
                     cbObjType.Enabled = false;
-                    if (objects[index].additionalData != null)
+                    if (activeObjectList.objects[index].additionalData != null)
                     {
                         foreach (var cb in cbDatas)
                           cb.Enabled = false;
@@ -589,7 +624,7 @@ namespace CadEditor
             }
             if (!selectedZero)
             {
-                btSortDown.Enabled = lvObjects.SelectedIndices[lvObjects.SelectedIndices.Count - 1] < objects.Count - 1;
+                btSortDown.Enabled = lvObjects.SelectedIndices[lvObjects.SelectedIndices.Count - 1] < activeObjectList.objects.Count - 1;
                 btSortUp.Enabled = lvObjects.SelectedIndices[0] > 0;
             }
 
@@ -616,7 +651,7 @@ namespace CadEditor
 
         private void returnCbLevelIndex()
         {
-            Utils.setCbIndexWithoutUpdateLevel(cbLayoutNo, cbLevel_SelectedIndexChanged, curActiveLayout);
+            UtilsGui.setCbIndexWithoutUpdateLevel(cbLayoutNo, cbLevel_SelectedIndexChanged, curActiveLayout);
             //save width/height
         }
 
@@ -624,6 +659,7 @@ namespace CadEditor
         {
             bool canMoveUp = true;
             int repeatCount = (Control.ModifierKeys == Keys.Shift) ? 10 : 1;
+            var activeObjectList = objectLists[curActiveObjectListIndex];
             for (int count = 0; count < repeatCount && canMoveUp; count++)
             {
                 var selInds = new List<int>();
@@ -631,9 +667,9 @@ namespace CadEditor
                 {
                     int ind = lvObjects.SelectedIndices[i];
                     selInds.Add(ind);
-                    var xchg = objects[ind];
-                    objects[ind] = objects[ind - 1];
-                    objects[ind - 1] = xchg;
+                    var xchg = activeObjectList.objects[ind];
+                    activeObjectList.objects[ind] = activeObjectList.objects[ind - 1];
+                    activeObjectList.objects[ind - 1] = xchg;
                 }
                 fillObjectsListBox();
                 for (int i = 0; i < selInds.Count; i++)
@@ -651,6 +687,7 @@ namespace CadEditor
         {
             bool canMoveDown = true;
             int repeatCount = (Control.ModifierKeys == Keys.Shift) ? 10 : 1;
+            var activeObjectList = objectLists[curActiveObjectListIndex];
             for (int count = 0; count < repeatCount && canMoveDown; count++)
             {
                 var selInds = new List<int>();
@@ -658,14 +695,14 @@ namespace CadEditor
                 {
                     int ind = lvObjects.SelectedIndices[i];
                     selInds.Add(ind);
-                    var xchg = objects[ind];
-                    objects[ind] = objects[ind + 1];
-                    objects[ind + 1] = xchg;
+                    var xchg = activeObjectList.objects[ind];
+                    activeObjectList.objects[ind] = activeObjectList.objects[ind + 1];
+                    activeObjectList.objects[ind + 1] = xchg;
                 }
                 fillObjectsListBox();
                 for (int i = 0; i < selInds.Count; i++)
                     lvObjects.Items[selInds[i] + 1].Selected = true;
-                canMoveDown = lvObjects.SelectedIndices[lvObjects.SelectedIndices.Count - 1] < objects.Count - 1;
+                canMoveDown = lvObjects.SelectedIndices[lvObjects.SelectedIndices.Count - 1] < activeObjectList.objects.Count - 1;
             }
             lvObjects.Select();
             dirty = true;
@@ -678,7 +715,8 @@ namespace CadEditor
         {
             if (lvObjects.SelectedIndices.Count > 0)
             {
-                btSortDown.Enabled = lvObjects.SelectedIndices[lvObjects.SelectedIndices.Count - 1] < objects.Count - 1;
+                var activeObjectList = objectLists[curActiveObjectListIndex];
+                btSortDown.Enabled = lvObjects.SelectedIndices[lvObjects.SelectedIndices.Count - 1] < activeObjectList.objects.Count - 1;
                 btSortUp.Enabled = lvObjects.SelectedIndices[0] > 0;
             }
         }
@@ -700,7 +738,8 @@ namespace CadEditor
 
         private void btSort_Click(object sender, EventArgs e)
         {
-            ConfigScript.sortObjects(getActiveLayoutNo(), objects);
+            var activeObjectList = objectLists[curActiveObjectListIndex];
+            ConfigScript.sortObjects(getActiveLayoutNo(), curActiveObjectListIndex, activeObjectList.objects);
             fillObjectsListBox();
         }
 
@@ -720,9 +759,11 @@ namespace CadEditor
             {
                 if (Control.ModifierKeys != Keys.Shift && Control.ModifierKeys != Keys.Control)
                     lvObjects.SelectedItems.Clear();
-                for (int i = 0; i < objects.Count; i++)
+
+                var activeObjectList = objectLists[curActiveObjectListIndex]; //TODO: all
+                for (int i = 0; i < activeObjectList.objects.Count; i++)
                 {
-                    var obj = objects[i];
+                    var obj = activeObjectList.objects[i];
                     if ((obj.sx == sx) && (obj.sy == sy) && (Math.Abs(obj.x - x) < 8) && (Math.Abs(obj.y - y) < 8))
                         lvObjects.Items[i].Selected = !lvObjects.Items[i].Selected;
                 }
@@ -741,10 +782,10 @@ namespace CadEditor
             int y = (int)(e.Y / curScale);
 
             int scrLevelNo = getLevelRecForGameType().levelNo;
-            int coordXCount = (ConfigScript.getMaxObjCoordX() != -1) ? ConfigScript.getMaxObjCoordX() : ConfigScript.getScreenWidth(scrLevelNo) * 32;
-            int coordYCount = (ConfigScript.getMaxObjCoordY() != -1) ? ConfigScript.getMaxObjCoordY() : ConfigScript.getScreenHeight(scrLevelNo) * 32;
-            int minCoordX = ConfigScript.getMinObjCoordX();
-            int minCoordY = ConfigScript.getMinObjCoordY();
+            int coordXCount = ConfigScript.getScreenWidth(scrLevelNo) * 32;
+            int coordYCount = ConfigScript.getScreenHeight(scrLevelNo) * 32;
+            int minCoordX = 0;
+            int minCoordY = 0;
             if (!ConfigScript.getScreenVertical())
             {
                 if (x >= coordXCount || y >= coordYCount || x < minCoordX || y < minCoordY)
@@ -758,9 +799,10 @@ namespace CadEditor
 
             if (curTool == ToolType.Select)
             {
+                var activeObjectList = objectLists[curActiveObjectListIndex]; //TODO: all
                 for (int i = 0; i < lvObjects.SelectedIndices.Count; i++)
                 {
-                    var obj = objects[lvObjects.SelectedIndices[i]];
+                    var obj = activeObjectList.objects[lvObjects.SelectedIndices[i]];
                     if (bindToAxis)
                     {
                         obj.x = (x / 8) * 8;
@@ -771,7 +813,7 @@ namespace CadEditor
                         obj.x = x;
                         obj.y = y;
                     }
-                    objects[lvObjects.SelectedIndices[i]] = obj;
+                    activeObjectList.objects[lvObjects.SelectedIndices[i]] = obj;
                 }
             }
             dirty = true;
@@ -808,10 +850,10 @@ namespace CadEditor
             if (curTool == ToolType.Create)
             {
                 int scrLevelNo = getLevelRecForGameType().levelNo;
-                int coordXCount = (ConfigScript.getMaxObjCoordX() != -1) ? ConfigScript.getMaxObjCoordX() : ConfigScript.getScreenWidth(scrLevelNo) * 32;
-                int coordYCount = (ConfigScript.getMaxObjCoordY() != -1) ? ConfigScript.getMaxObjCoordY() : ConfigScript.getScreenHeight(scrLevelNo) * 32;
-                int minCoordX = ConfigScript.getMinObjCoordX();
-                int minCoordY = ConfigScript.getMinObjCoordY();
+                int coordXCount = ConfigScript.getScreenWidth(scrLevelNo) * 32;
+                int coordYCount = ConfigScript.getScreenHeight(scrLevelNo) * 32;
+                int minCoordX = 0;
+                int minCoordY = 0;
 
                 if (!ConfigScript.getScreenVertical())
                 {
@@ -829,26 +871,28 @@ namespace CadEditor
                     x = (x / 8) * 8;
                     y = (y / 8) * 8;
                 }
-                var dictionary = ConfigScript.getObjectDictionary(type);
+                var dictionary = ConfigScript.getObjectDictionary(curActiveObjectListIndex, type);
                 var obj = new ObjectRec(type, sx, sy, x, y, dictionary);
 
                 int insertPos = lvObjects.SelectedItems.Count > 0 ? lvObjects.SelectedIndices[0] + 1 : lvObjects.Items.Count;
-                objects.Insert(insertPos, obj);
+                var activeObjectList = objectLists[curActiveObjectListIndex];
+                activeObjectList.objects.Insert(insertPos, obj);
 
                 lvObjects.Items.Insert(insertPos, new ListViewItem(makeStringForObject(obj), obj.type));
-                lbObjectsCount.Text = String.Format("Objects count: {0}/{1}", lvObjects.Items.Count, getLevelRecForGameType().objCount);
+                lbObjectsCount.Text = String.Format("objects count: {0}/{1}", lvObjects.Items.Count, getLevelRecForGameType().objCount);
             }
             else if (curTool == ToolType.Delete)
             {
-                for (int i = objects.Count - 1; i >= 0; i--)
+                var activeObjectList = objectLists[curActiveObjectListIndex]; //TODO: all
+                for (int i = activeObjectList.objects.Count - 1; i >= 0; i--)
                 {
-                    var obj = objects[i];
+                    var obj = activeObjectList.objects[i];
                     if ((obj.sx == sx) && (obj.sy == sy) && (Math.Abs(obj.x - x) < 8) && (Math.Abs(obj.y - y) < 8))
                     {
                         if (MessageBox.Show("Do you really want to delete object?", "Confirm", MessageBoxButtons.YesNo) != DialogResult.Yes)
                             return;
                         dirty = true;
-                        objects.RemoveAt(i);
+                        activeObjectList.objects.RemoveAt(i);
                         fillObjectsListBox();
                         break;
                     }
@@ -903,9 +947,34 @@ namespace CadEditor
         {
             loadFromJsonFile("test.json");
         }
+
+        private void cbObjectList_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if (cbObjectList.SelectedIndex == -1)
+                return;
+            curActiveObjectListIndex = cbObjectList.SelectedIndex;
+            fillObjectsListBox();
+            mapScreen.Invalidate();
+        }
     }
 
+    public class ObjectList : IEquatable<ObjectList>
+    {
+        public ObjectList()
+        {
+            objects = new List<ObjectRec>();
+            name = "Objects";
+        }
+        public List<ObjectRec> objects;
+        public string name;
 
+        bool IEquatable<ObjectList>.Equals(ObjectList other)
+        {
+            if (name != other.name)
+                return false;
+            return objects.SequenceEqual(other.objects);
+        }
+    }
 
     enum ToolType
     {

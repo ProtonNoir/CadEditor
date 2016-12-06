@@ -5,7 +5,7 @@ using System.Collections.Generic;
 public static class FliUtils
 {
   //addrs saved in ram at D7-D9-DC-DC
-  public static List<ObjectRec> getObjects(int levelNo)
+  public static List<ObjectList> getObjects(int levelNo)
   {
     LevelRec lr = ConfigScript.getLevelRec(levelNo);
     int objCount = lr.objCount;
@@ -24,14 +24,15 @@ public static class FliUtils
       var obj = new ObjectRec(v, 0, 0, realx, realy, dataDict);
       objects.Add(obj);
     }
-    return objects;
+    return new List<ObjectList> { new ObjectList { objects = objects, name = "Objects" } };
   }
 
-  public static bool setObjects(int levelNo, List<ObjectRec> objects)
+  public static bool setObjects(int levelNo, List<ObjectList> objLists)
   {
     LevelRec lr = ConfigScript.getLevelRec(levelNo);
     int objCount = lr.objCount;
     int baseAddr = lr.objectsBeginAddr;
+    var objects = objLists[0].objects;
     for (int i = 0; i < objects.Count; i++)
     {
         var obj = objects[i];
@@ -59,8 +60,87 @@ public static class FliUtils
     return new LevelLayerData(1, 1, layer);
   }
   
-  public static Dictionary<String,int> getObjectDictionary(int type)
+  public static LevelLayerData getLayoutRom(int levelNo)
+  {
+    byte[] layer = new byte[1];
+    layer[0] = 1;
+    return new LevelLayerData(1, 1, layer);
+  }
+  
+  public static Dictionary<String,int> getObjectDictionary(int listNo, int type)
   {
     return new Dictionary<String, int> { {"data", 0} };
   }
+  
+  public static ObjRec[] getBlocks(int blockIndex)
+  {
+    int count = ConfigScript.getBlocksCount();
+    int addr  = ConfigScript.getTilesAddr(blockIndex);
+    var objects = new ObjRec[count];
+    for (int i = 0; i < count; i++)
+    {
+        byte c1, c2, c3, c4, typeColor;
+        c1 = Globals.romdata[addr + i*4 + 0];
+        c2 = Globals.romdata[addr + i*4 + 2];
+        c3 = Globals.romdata[addr + i*4 + 1];
+        c4 = Globals.romdata[addr + i*4 + 3];
+        typeColor = Globals.romdata[addr + count * 4 + i];
+        objects[i] = new ObjRec(c1, c2, c3, c4, typeColor);
+    }
+    return objects;
+  }
+  
+  public static void setBlocks(int blockIndex, ObjRec[] blocksData)
+  {
+    int count = ConfigScript.getBlocksCount();
+    int addr  = ConfigScript.getTilesAddr(blockIndex);
+    for (int i = 0; i < count; i++)
+    {
+        var obj = blocksData[i];
+        Globals.romdata[addr + i*4 + 0] = obj.c1;
+        Globals.romdata[addr + i*4 + 2] = obj.c2;
+        Globals.romdata[addr + i*4 + 1] = obj.c3;
+        Globals.romdata[addr + i*4 + 3] = obj.c4;
+        Globals.romdata[addr + count * 4 + i] = obj.typeColor;
+    }
+  }
+  
+  private static void xchg(int[] arr, int i1, int i2)
+  {
+      int tmp = arr[i1];
+      arr[i1] = arr[i2];
+      arr[i2] = tmp;
+  }
+  
+  private static void transposeBigBlocks(BigBlock[] bblocks)
+  {
+    for (int i = 0; i < bblocks.Length; i++)
+    {
+        var bb = bblocks[i];
+        xchg(bb.indexes, 1, 4);
+        xchg(bb.indexes, 2, 8);
+        xchg(bb.indexes, 3, 12);
+        xchg(bb.indexes, 6, 9);
+        xchg(bb.indexes, 7, 13);
+        xchg(bb.indexes, 11, 14);
+    }
+  }
+  
+  public static BigBlock[] getBigBlocks(int bigTileIndex)
+  {
+    var data = Utils.readLinearBigBlockData(0, bigTileIndex, 16);
+    var bblocks = Utils.unlinearizeBigBlocks(data, 4, 4);
+    transposeBigBlocks(bblocks);
+    return bblocks;
+  }
+  
+  public static void setBigBlocks(int bigTileIndex, BigBlock[] bigBlockIndexes)
+  {
+    transposeBigBlocks(bigBlockIndexes);
+    var data = Utils.linearizeBigBlocks(bigBlockIndexes);
+    Utils.writeLinearBigBlockData(0, bigTileIndex, data);
+  }
+  
+  public static int getConvertScreenTile(int v)         { return (v >> 4) | (v & 0x0F) << 4;}
+  public static int getBackConvertScreenTile(int v)     { return (v >> 4) | (v & 0x0F) << 4;}
 }

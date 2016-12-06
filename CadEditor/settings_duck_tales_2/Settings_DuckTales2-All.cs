@@ -8,16 +8,17 @@ public class Data:CapcomBase
   {
     return new string[] 
     {
+      "PluginMapEditor.dll",
       "PluginChrView.dll",
-      "PluginEditLayout.dll"
+      "PluginEditLayout.dll",
     };
   }
   public GameType getGameType()  { return GameType.DT2; }
   public bool isShowScrollsInLayout() { return false; }
   
   public OffsetRec getPalOffset()       { return new OffsetRec(0x3E2F, 12   , 16);     }
-  public OffsetRec getVideoOffset()     { return new OffsetRec(0x4D10 , 5   , 0xD00);  }
-  public OffsetRec getVideoObjOffset()  { return new OffsetRec(0x4D10 , 5   , 0xD00);  }
+  public OffsetRec getVideoOffset()     { return new OffsetRec(0x4D10 , 7   , 0xD00);  }
+  public OffsetRec getVideoObjOffset()  { return new OffsetRec(0x4D10 , 7   , 0xD00);  }
   public OffsetRec getBigBlocksOffset() { return new OffsetRec(0x7310 , 3   , 0x4000); }
   public OffsetRec getBlocksOffset()    { return new OffsetRec(0x1008A , 5  , 0x440);  }
   public OffsetRec getScreensOffset()   { return new OffsetRec(0x11d5a, 300 , 0x40);   }
@@ -70,7 +71,14 @@ public class Data:CapcomBase
   
   public byte[] getDuckTalesVideoChunk(int videoPageId)
   {
-    return Utils.readVideoBankFromFile("videoBack_DT2.bin", videoPageId);
+    if (videoPageId < 0x96)
+    {
+        return Utils.readVideoBankFromFile("videoBack_DT2.bin", videoPageId);
+    }
+    else
+    {
+        return Utils.readVideoBankFromFile("videoMap_DT2.bin", 0x90);
+    }
   }
   
   public int getBigBlocksCountForLevel(int levelNo)
@@ -92,24 +100,25 @@ public class Data:CapcomBase
     return levelPointers[levelNo];
   }
   
-  public byte[] getBigBlocksDt2(int bigTileIndex)
+  public BigBlock[] getBigBlocksDt2(int bigTileIndex)
   {
     int[] addrPointers = getBigBlocksPtrsForLevel(bigTileIndex);
     int blocksCount = getBigBlocksCountForLevel(bigTileIndex);
     byte[] bigBlockIndexes = new byte[getBigBlocksCount()*4];
     byte[] tempIndexes = Utils.readDataFromUnalignedArrays(Globals.romdata, addrPointers[0], addrPointers[1], addrPointers[2], addrPointers[3], blocksCount);
-    Array.Copy(tempIndexes, bigBlockIndexes, blocksCount*4);    
-    return bigBlockIndexes;
+    Array.Copy(tempIndexes, bigBlockIndexes, blocksCount*4); 
+    return Utils.unlinearizeBigBlocks(bigBlockIndexes, 2, 2);
   }
   
-  public void setBigBlocksDt2(int bigTileIndex, byte[] data)
+  public void setBigBlocksDt2(int bigTileIndex, BigBlock[] bigBlocks)
   {
     int[] addrPointers = getBigBlocksPtrsForLevel(bigTileIndex);
     int blocksCount = getBigBlocksCountForLevel(bigTileIndex);
+    var data = Utils.linearizeBigBlocks(bigBlocks);
     Utils.writeDataToUnalignedArrays(data, Globals.romdata, addrPointers[0], addrPointers[1], addrPointers[2], addrPointers[3], blocksCount); 
   }
   
-  public List<ObjectRec> getObjectsDt2(int levelNo)
+  public List<ObjectList> getObjectsDt2(int levelNo)
   {
     LevelRec lr = ConfigScript.getLevelRec(levelNo);
     int objCount = lr.objCount, addr = lr.objectsBeginAddr;
@@ -142,10 +151,10 @@ public class Data:CapcomBase
             addr += 3;
         }
     }
-    return objects;
+    return new List<ObjectList> { new ObjectList { objects = objects, name = "Objects" } };
   }
   
-  /*public bool setObjectsDt2(int levelNo, List<ObjectRec> objects)
+  /*public bool setObjectsDt2(int levelNo, List<ObjectList> objects)
   {
     //todo : add save for duck tales 2
     return true;
@@ -153,7 +162,7 @@ public class Data:CapcomBase
   
   public void setBlocksDt2(int blockIndex, ObjRec[] objects)
   {
-    int addr = Globals.getTilesAddr(blockIndex);
+    int addr = ConfigScript.getTilesAddr(blockIndex);
     int count = getBlocksCount();
     for (int i = 0; i < count; i++)
     {

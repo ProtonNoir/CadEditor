@@ -9,18 +9,28 @@ public static class TinyToonUtils
   //--------------------------------------------------------------------------------------------------------------
   public static ObjRec[] getBlocks(int blockIndex)
   {
-    return readBlocksFromAlignedArraysTT(Globals.romdata, Globals.getTilesAddr(blockIndex), getBlocksCount());
+    return readBlocksFromAlignedArraysTT(Globals.romdata, ConfigScript.getTilesAddr(blockIndex), ConfigScript.getBlocksCount());
   }
   
   public static void setBlocks(int blockIndex, ObjRec[] blocksData)
   {
-    writeBlocksToAlignedArraysTT(blocksData, Globals.romdata, Globals.getTilesAddr(blockIndex), getBlocksCount());
+    writeBlocksToAlignedArraysTT(blocksData, Globals.romdata, ConfigScript.getTilesAddr(blockIndex), ConfigScript.getBlocksCount());
   }
   
   //--------------------------------------------------------------------------------------------------------------
-  static int getBlocksCount()
+  
+  public static BigBlock[] getBigBlocksTT(int bigTileIndex)
   {
-    return 256;
+    var bigBlocksAddr = ConfigScript.getBigTilesAddr(0, bigTileIndex);
+    var data = Utils.readDataFromAlignedArrays(Globals.romdata, bigBlocksAddr, ConfigScript.getBigBlocksCount(0));
+    return Utils.unlinearizeBigBlocks(data, 2, 2);
+  }
+  
+  public static void setBigBlocksTT(int bigTileIndex, BigBlock[] bigBlockIndexes)
+  {
+    var bigBlocksAddr = ConfigScript.getBigTilesAddr(0, bigTileIndex);
+    var data = Utils.linearizeBigBlocks(bigBlockIndexes);
+    Utils.writeDataToAlignedArrays(data, Globals.romdata, bigBlocksAddr, ConfigScript.getBigBlocksCount(0));
   }
   
   static ObjRec[] readBlocksFromAlignedArraysTT(byte[] romdata, int addr, int count)
@@ -51,7 +61,7 @@ public static class TinyToonUtils
     }
   }
   
-  public static List<ObjectRec> getObjectsTT(int levelNo)
+  public static List<ObjectList> getObjectsTT(int levelNo)
   {
     LevelRec lr = ConfigScript.getLevelRec(levelNo);
     int objCount = lr.objCount, addr = lr.objectsBeginAddr;
@@ -68,14 +78,15 @@ public static class TinyToonUtils
         var obj = new ObjectRec(v, sx, sy, x, y);
         objects.Add(obj);
     }
-    return objects;
+    return new List<ObjectList> { new ObjectList { objects = objects, name = "Objects" } };
   }
 
-  public static bool setObjectsTT(int levelNo, List<ObjectRec> objects)
+  public static bool setObjectsTT(int levelNo, List<ObjectList> objLists)
   {
     LevelRec lr = ConfigScript.getLevelRec(levelNo);
     int addrBase = lr.objectsBeginAddr;
     int objCount = lr.objCount;
+    var objects = objLists[0].objects;
     for (int i = 0; i < objects.Count; i++)
     {
         var obj = objects[i];
@@ -94,9 +105,9 @@ public static class TinyToonUtils
   
   public static LevelLayerData getLayoutLinearTT(int curActiveLayout)
   {
-      int layoutAddr = Globals.getLayoutAddr(curActiveLayout);
-      int width = Globals.getLevelWidth(curActiveLayout);
-      int height = Globals.getLevelHeight(curActiveLayout);
+      int layoutAddr = ConfigScript.getLayoutAddr(curActiveLayout);
+      int width = ConfigScript.getLevelWidth(curActiveLayout);
+      int height = ConfigScript.getLevelHeight(curActiveLayout);
       byte[] layer = new byte[width * height];
       for (int i = 0; i < width * height; i++)
           layer[i] = (byte)(i + 1);

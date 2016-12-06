@@ -3,6 +3,14 @@ using System.Collections.Generic;
 
 public class Data
 {
+  public string[] getPluginNames() 
+  {
+    return new string[] 
+    {
+      "PluginSegaBackEditor.dll",
+    };
+  }
+  
   public bool isUseSegaGraphics()            { return true; }
   //public bool isBuildScreenFromSmallBlocks() { return true; }
   public int getWordLen()              { return 2;}
@@ -20,14 +28,27 @@ public class Data
   
   public GetVideoChunkFunc    getVideoChunkFunc()    { return getVideoChuck;   }
   public SetVideoChunkFunc    setVideoChunkFunc()    { return null; }
-  public GetBigBlocksFunc     getBigBlocksFunc()     { return Utils.getBigBlocksCapcomDefault;}
-  public SetBigBlocksFunc     setBigBlocksFunc()     { return Utils.setBigBlocksCapcomDefault;}
   public GetPalFunc           getPalFunc()           { return Utils.getPalleteLinear;}
   public SetPalFunc           setPalFunc()           { return null;}
   public GetObjectsFunc getObjectsFunc() { return null; }
   public SetObjectsFunc setObjectsFunc() { return null; }
   public ConvertScreenTileFunc getConvertScreenTileFunc() { return (v=>v/8);}
   public ConvertScreenTileFunc getBackConvertScreenTileFunc() { return (v=>v*8);}
+  
+  public LoadSegaBackFunc     loadSegaBackFunc()     { return loadBack;}
+  public SaveSegaBackFunc     saveSegaBackFunc()     { return saveBack;}
+  
+  private string BACK_NAME   = "SegaJungleBookBack_1.bin";
+  
+  public byte[] loadBack()
+  {
+    return Utils.loadDataFromFile(BACK_NAME);
+  }
+  
+  public void saveBack(byte[] data)
+  {
+    Utils.saveDataToFile(BACK_NAME, data);
+  }
   
   public byte[] getVideoChuck(int videoPageId)
   {

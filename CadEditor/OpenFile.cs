@@ -43,13 +43,15 @@ namespace CadEditor
         private void btOpen_Click(object sender, EventArgs e)
         {
             FileName = tbFileName.Text;
-            FileSize= (int)new FileInfo(FileName).Length;
             DumpName = tbDumpName.Text;
-            if (DumpName != "")
-              DumpSize = (int)new FileInfo(DumpName).Length;
             ConfigName = tbConfigName.Text;
             DialogResult = DialogResult.OK;
             Close();
+
+            Properties.Settings.Default["FileName"] = FileName;
+            Properties.Settings.Default["DumpName"] = DumpName;
+            Properties.Settings.Default["ConfigName"] = ConfigName;
+            Properties.Settings.Default.Save();
         }
 
         private void btClose_Click(object sender, EventArgs e)
@@ -61,18 +63,24 @@ namespace CadEditor
         public static string FileName = "";
         public static string DumpName = "";
         public static string ConfigName="";
-        public static int FileSize = 0;
-        public static int DumpSize = 0;
 
         private void OpenFile_Load(object sender, EventArgs e)
         {
             tbDumpName.Enabled = ConfigScript.showDumpFileField;
             lbDumpName.Enabled = ConfigScript.showDumpFileField;
-            if (FileName == "")
+
+            if (Properties.Settings.Default["FileName"].ToString() != "")
+                tbFileName.Text = Properties.Settings.Default["FileName"].ToString();
+            if (Properties.Settings.Default["DumpName"].ToString() != "")
+                tbDumpName.Text = Properties.Settings.Default["DumpName"].ToString();
+            if (Properties.Settings.Default["ConfigName"].ToString() != "")
+                tbConfigName.Text = Properties.Settings.Default["ConfigName"].ToString();
+
+            if (FileName == "" && ConfigScript.romName != "")
                 tbFileName.Text = ConfigScript.romName;
-            if (DumpName == "")
+            if (DumpName == "" && ConfigScript.dumpName != "")
                 tbDumpName.Text = ConfigScript.dumpName;
-            if (ConfigName == "")
+            if (ConfigName == "" && ConfigScript.cfgName != "")
                 tbConfigName.Text = ConfigScript.cfgName;
 
             ofOpenDialog.InitialDirectory = Environment.CurrentDirectory;
