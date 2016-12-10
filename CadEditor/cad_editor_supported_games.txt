@@ -15,7 +15,7 @@
     Mega Man 3                                      (все уровни)
     Mega Man 4                                      (все уровни)
     Mega Man 5                                      (все уровни)
-    Rockin' Kats                                    (1 уровень)
+    Rockin' Kats                                    (все уровни)
     Three Eyes Story                                (1 уровень)
     Flintstones: The Surprise at Dinosaur Peak!     (1 уровень  + редактор объектов 1 уровня)
   редактор экранов картинками:
@@ -57,6 +57,11 @@
     Gun Smoke                                       (1 уровень)
     Little Samson                                   (1 уровень)
     Darkman                                         (1 уровень)
+    Felix the Cat                                   (1 уровень, дапм+скрипт компрессии)
+    Addams Family, The - Pugsley's Scavenger Hunt
+    Moon Crystal
+    Mappy Kids
+    Predator
     Super Robin Good
     Young Indiana Jones Chronicles
     Hook

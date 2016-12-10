@@ -4,6 +4,7 @@ import os
 GoodNesPath = r"d:\ROM\Dendy\GoodNES3.1\best"
 
 fnames = [
+    "Addams Family, The - Pugsley's Scavenger Hunt (U) [!p].nes"
     "Adventures in the Magic Kingdom (E) [!].nes",
     "Alien 3 (E) [!].nes",
     "Batman (U) [!].nes",
@@ -20,6 +21,7 @@ fnames = [
     "Darkwing Duck (U) [!].nes",
     "Duck Tales (U) [!].nes",
     "Duck Tales 2 (U) [!].nes",
+    "Felix the Cat (U) [!].nes",
     "Flintstones, The - The Rescue of Dino & Hoppy (E) [!p].nes",
     "Flintstones, The - The Surprise at Dinosaur Peak! (U) [!p].nes",
     "Goonies II, The (U) [!].nes",
@@ -34,6 +36,7 @@ fnames = [
     "Little Mermaid, The (U) [!].nes",
     "Little Nemo - The Dream Master (U) [!].nes",
     "Little Samson (U) [!p].nes",
+    "Mappy Kids (J).nes",
     "Megaman (U) [!].nes",
     "Megaman II (U) [!].nes",
     "Megaman III (U) [!].nes",
@@ -45,11 +48,13 @@ fnames = [
     "Mighty Final Fight (U) [!p].nes",
     "Mitsume ga Tooru (J).nes",
     "Monster In My Pocket (U) [!].nes",
+    "Moon Crystal (J) [!].nes",
     "New Ghostbusters II (E) [!].nes",
     "Ninja Gaiden (U) [!].nes",
     "Ninja Gaiden III - The Ancient Ship of Doom (U) [!].nes",
     "Power Blade (E) [!].nes",
     "Power Blade 2 (U) [!].nes",
+    "Predator (U) [!].nes",
     "Raf World (J).nes",
     "Rockin' Kats (U) [!].nes",
     "Shadow of the Ninja (U) [!].nes",
