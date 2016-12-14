@@ -162,21 +162,10 @@ namespace PluginVideoNes
             return res;
         }
 
-        //TODO: write universal "RectangulateStripImage function"
-        //using makeImageStrip for now. Return rectangle CHR bank image
         public Bitmap makeImageRectangle(byte[] videoChunk, byte[] pallete, int subPalIndex, float scale, bool scaleAccurate = true, bool withAlpha = false)
         {
-            Bitmap imageStrip = ConfigScript.videoNes.makeImageStrip(videoChunk, pallete, subPalIndex, scale, scaleAccurate, withAlpha);
-            Bitmap resultVideo = new Bitmap((int)(128*scale), (int)(128*scale));
-            using (Graphics g = Graphics.FromImage(resultVideo))
-            {
-                for (int i = 0; i < 256; i++)
-                {
-                    int size = (int)(8* scale);
-                    g.DrawImage(imageStrip, new Rectangle(i%16 * size, (i/16) *size, size, size), new Rectangle(i * size, 0, size, size) , GraphicsUnit.Pixel);
-                }
-            }
-            return resultVideo;
+            var images = Enumerable.Range(0, 256).Select(i => makeImage(i, videoChunk, pallete, subPalIndex, scale, scaleAccurate, withAlpha));
+            return UtilsGDI.GlueImages(images.ToArray(), 16, 16);
         }
 
         public Bitmap makeObject(int index, ObjRec[] objects, Bitmap[] objStrips, float scale, MapViewType drawType, int constantSubpal = -1)
@@ -187,15 +176,7 @@ namespace PluginVideoNes
             Bitmap curStrip;
             if (constantSubpal == -1)
             {
-                if (Globals.getGameType() == GameType.DT2)
-                {
-                    var objectForColor = objects[i / 4];
-                    curStrip = objStrips[objectForColor.getSubpalleteForDt2(i % 4)];
-                }
-                else
-                {
-                    curStrip = objStrips[co.getSubpallete()];
-                }
+                curStrip = objStrips[co.getSubpallete()];
             }
             else
             {
@@ -212,16 +193,8 @@ namespace PluginVideoNes
                 g2.DrawImage(curStrip, new Rectangle(scaleInt8, scaleInt8, scaleInt8, scaleInt8), new Rectangle(co.c4 * scaleInt8, 0, scaleInt8, scaleInt8), GraphicsUnit.Pixel);
                 if (drawType == MapViewType.ObjType)
                 {
-                    if (Globals.getGameType() == GameType.DT2)
-                    {
-                        g2.FillRectangle(new SolidBrush(CadObjectTypeColors[co.getTypeForDt2(i)]), new Rectangle(0, 0, scaleInt16, scaleInt16));
-                        g2.DrawString(String.Format("{0:X}", co.getTypeForDt2(i)), new Font("Arial", 6), Brushes.White, new Point(0, 0));
-                    }
-                    else
-                    {
-                        g2.FillRectangle(new SolidBrush(CadObjectTypeColors[co.getType()]), new Rectangle(0, 0, scaleInt16, scaleInt16));
-                        g2.DrawString(String.Format("{0:X}", co.getType()), new Font("Arial", 6), Brushes.White, new Point(0, 0));
-                    }
+                    g2.FillRectangle(new SolidBrush(CadObjectTypeColors[co.getType()]), new Rectangle(0, 0, scaleInt16, scaleInt16));
+                    g2.DrawString(String.Format("{0:X}", co.getType()), new Font("Arial", 6), Brushes.White, new Point(0, 0));
                 }
                 else if (drawType == MapViewType.ObjNumbers)
                 {
@@ -364,6 +337,7 @@ namespace PluginVideoNes
             if (scrNo < 0)
                 return VideoHelper.emptyScreen((int)(ConfigScript.getScreenWidth(levelNo) * 32 * scale), (int)(ConfigScript.getScreenHeight(levelNo) * 32 * scale));
             var bigBlocks = makeBigBlocks(videoNo, bigBlockNo, blockNo, palleteNo, MapViewType.Tiles, scale, scale, MapViewType.Tiles, withBorders);
+            //var bigBlocks = makeBigBlocks(videoNo, bigBlockNo, blockNo, palleteNo, MapViewType.ObjType, scale, scale,MapViewType.Tiles, withBorders);
             var il = new ImageList();
             if (bigBlocks.Length > 0)
             {

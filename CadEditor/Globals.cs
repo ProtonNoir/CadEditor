@@ -125,28 +125,6 @@ namespace CadEditor
             return result;
         }
 
-        private static int compareRooms(List<ScreenRec> r1, List<ScreenRec> r2)
-        {
-            if (r1.Count == 0 || r2.Count == 0)
-                return 0;
-            return r1[0].sx > r2[0].sx ? 1 : r1[0].sx < r2[0].sx ? -1 : r1[0].sy > r2[0].sy ? 1 : r1[0].sy < r2[0].sy ? -1 : 0;
-        }
-
-        private static bool getBacksort(LevelLayerData curLevelLayerData, int curIndex)
-        {
-            //int curScroll = curLevelLayerData.scroll[curIndex] >> 5;
-            int height = curIndex / curLevelLayerData.width;
-            bool backSort = curLevelLayerData.dirs[height] != 0;
-            return backSort;
-        }
-
-        private static bool getUpsort(LevelLayerData curLevelLayerData, int curIndex)
-        {
-            int curScroll = curLevelLayerData.scroll[curIndex] >> 5;
-            bool upsort = curScroll == 0;
-            return upsort;
-        }
-
         public static byte[] romdata;
         public static byte[] dumpdata;
         public static int CHUNKS_COUNT = 256;
@@ -214,7 +192,7 @@ namespace CadEditor
         public int addrOfVideo;
     }
 
-    public struct ObjRec
+    public class ObjRec
     {
         public ObjRec(byte c1, byte c2, byte c3, byte c4, byte typeColor)
         {
@@ -224,30 +202,25 @@ namespace CadEditor
             this.c4 = c4;
             this.typeColor = typeColor;
         }
+
+        public ObjRec(ObjRec other)
+        {
+            this.c1 = other.c1;
+            this.c2 = other.c2;
+            this.c3 = other.c3;
+            this.c4 = other.c4;
+            this.typeColor = other.typeColor;
+        }
+
         public byte c1, c2, c3, c4;
         public byte typeColor;
 
-        public int getSubpallete()
+        public virtual int getSubpallete()
         {
             return typeColor & 0x3;
         }
 
-        public int getSubpalleteForDt2(int parByteNo)
-        {
-            return (typeColor >> parByteNo*2) & 3;
-        }
-
-        public void setSubpalleteForDt2(int parByteNo, int color)
-        {
-            typeColor = (byte)((typeColor & (~(3 << parByteNo * 2))) | (color << parByteNo * 2)); 
-        }
-
-        public int getTypeForDt2(int no)
-        {
-            return no < 0xA0 ? 0 : 5;
-        }
-
-        public int getType()
+        public virtual int getType()
         {
             return (typeColor & 0xF0) >> 4;
         }
@@ -429,7 +402,6 @@ namespace CadEditor
     public enum GameType
     {
         Generic,
-        DT2,
         TT,
     };
 
