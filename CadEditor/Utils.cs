@@ -121,17 +121,18 @@ namespace CadEditor
             return result;
         }
 
-        public static BigBlock[] unlinearizeBigBlocks(byte[] data, int w, int h)
+        public static T[] unlinearizeBigBlocks<T>(byte[] data, int w, int h)
+            where T : BigBlock
         {
             if ((data == null)  || (data.Length == 0))
             {
-                return new BigBlock[0];
+                return new T[0];
             }
             int size = w*h;
-            BigBlock[] result = new BigBlock[data.Length / size];
+            T[] result = new T[data.Length / size];
             for (int i = 0; i < result.Length; i++)
             {
-                result[i] = new BigBlock(w, h);
+                result[i] = Activator.CreateInstance(typeof(T), w,h) as T;
                 Array.Copy(data, i*size, result[i].indexes, 0, size);
             }
             return result;
@@ -279,11 +280,11 @@ namespace CadEditor
             for (int i = 0; i < count; i++)
             {
                 var obj = objects[i];
-                romdata[addr + i * 5 + 0] = obj.c1;
-                romdata[addr + i * 5 + 1] = obj.c2;
-                romdata[addr + i * 5 + 2] = obj.c3;
-                romdata[addr + i * 5 + 3] = obj.c4;
-                romdata[addr + i * 5 + 4] = obj.typeColor;
+                romdata[addr + i * 5 + 0] = (byte)obj.c1;
+                romdata[addr + i * 5 + 1] = (byte)obj.c2;
+                romdata[addr + i * 5 + 2] = (byte)obj.c3;
+                romdata[addr + i * 5 + 3] = (byte)obj.c4;
+                romdata[addr + i * 5 + 4] = (byte)obj.typeColor;
             }
         }
 
@@ -292,11 +293,11 @@ namespace CadEditor
             for (int i = 0; i < count; i++)
             {
                 var obj = objects[i];
-                romdata[addr + i] = obj.c1;
-                romdata[addr + count * 1 + i] = obj.c2;
-                romdata[addr + count * 2 + i] = obj.c3;
-                romdata[addr + count * 3 + i] = obj.c4;
-                romdata[addr + count * 4 + i] = obj.typeColor;
+                romdata[addr + i] = (byte)obj.c1;
+                romdata[addr + count * 1 + i] = (byte)obj.c2;
+                romdata[addr + count * 2 + i] = (byte)obj.c3;
+                romdata[addr + count * 3 + i] = (byte)obj.c4;
+                romdata[addr + count * 4 + i] = (byte)obj.typeColor;
             }
         }
 
@@ -340,7 +341,7 @@ namespace CadEditor
         public static BigBlock[] getBigBlocksCapcomDefault(int bigTileIndex)
         {
             var data = readLinearBigBlockData(0, bigTileIndex);
-            return Utils.unlinearizeBigBlocks(data, 2, 2);
+            return Utils.unlinearizeBigBlocks<BigBlock>(data, 2, 2);
         }
 
         public static void writeLinearBigBlockData(int hierLevel, int bigTileIndex, byte[] bigBlockIndexes)
@@ -366,7 +367,6 @@ namespace CadEditor
                 data[i * 4 + 1] = Globals.romdata[addr + count * 1 + i];
                 data[i * 4 + 2] = Globals.romdata[addr + count * 2 + i];
                 data[i * 4 + 3] = Globals.romdata[addr + count * 3 + i];
-                //data[i *4 + 4] = Globals.romdata[addr + count*4 + i]; // for tt
             }
             return data;
         }
@@ -379,7 +379,6 @@ namespace CadEditor
                 Globals.romdata[addr + count * 1 + i] = data[i * 4 + 1];
                 Globals.romdata[addr + count * 2 + i] = data[i * 4 + 2];
                 Globals.romdata[addr + count * 3 + i] = data[i * 4 + 3];
-                //Globals.romdata[addr + count*4 + i] = data[i *4 + 4]; // for tt
             }
         }
 
@@ -404,6 +403,54 @@ namespace CadEditor
                 Globals.romdata[addr2 + i] = data[i * 4 + 1];
                 Globals.romdata[addr3 + i] = data[i * 4 + 2];
                 Globals.romdata[addr4 + i] = data[i * 4 + 3];
+            }
+        }
+
+        public static ObjRec[] getBlocksFromTiles16Pal1(int blockIndex)
+        {
+            return readBlocksLinearTiles16Pal1(Globals.romdata, ConfigScript.getTilesAddr(blockIndex), ConfigScript.getPalBytesAddr(), ConfigScript.getBlocksCount());
+        }
+
+        public static void setBlocksFromTiles16Pal1(int blockIndex, ObjRec[] blocksData)
+        {
+            writeBlocksLinearTiles16Pal1(blocksData, Globals.romdata, ConfigScript.getTilesAddr(blockIndex), ConfigScript.getPalBytesAddr(), ConfigScript.getBlocksCount());
+        }
+
+        public static ObjRec[] readBlocksLinearTiles16Pal1(byte[] romdata, int addr, int palBytesAddr, int count)
+        {
+            int BLOCK_W = 4;
+            int BLOCK_H = 4;
+            int BLOCK_S = BLOCK_H * BLOCK_H;
+            var objects = new ObjRec[count];
+            for (int i = 0; i < count; i++)
+            {
+                var indexes = new int[BLOCK_S];
+                var palBytes = new int[BLOCK_S / 4];
+                for (int bi = 0; bi < BLOCK_S; bi++)
+                {
+                    indexes[bi] = romdata[addr + i * BLOCK_S + bi];
+                }
+                int palByte = romdata[palBytesAddr + i];
+                palBytes = new int[] { (palByte >> 0) & 3, (palByte >> 2) & 3, (palByte >> 4) & 3, (palByte >> 6) & 3 };
+
+                objects[i] = new ObjRec(BLOCK_W, BLOCK_H, indexes, palBytes);
+            }
+            return objects;
+        }
+
+        public static void writeBlocksLinearTiles16Pal1(ObjRec[] objects, byte[] romdata, int addr, int palBytesAddr, int count)
+        {
+            for (int i = 0; i < count; i++)
+            {
+                var obj = objects[i];
+                int BLOCK_S = obj.indexes.Length;
+                for (int bi = 0; bi < BLOCK_S; bi++)
+                {
+                    romdata[addr + i * BLOCK_S + bi] = (byte)obj.indexes[bi];
+                }
+                var objPalBytes = obj.palBytes;
+                int palByte = objPalBytes[0] | objPalBytes[1] << 2 | objPalBytes[2] << 4 | objPalBytes[3] << 6;
+                romdata[palBytesAddr + i] = (byte)palByte;
             }
         }
 
@@ -549,7 +596,6 @@ namespace CadEditor
 
         public static byte[] readVideoBankFrom16Pointers(int[] ptrs)
         {
-            //local version for cad & dwd
             byte[] videoChunk = new byte[Globals.VIDEO_PAGE_SIZE];
             for (int i = 0; i < ptrs.Length; i++)
             {

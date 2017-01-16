@@ -137,11 +137,11 @@ public class Data
     for (int i = 0; i < count; i++)
     {
         var obj = blocksData[i];
-        Globals.romdata[addr + i*4 + 0] = obj.c1;
-        Globals.romdata[addr + i*4 + 2] = obj.c2;
-        Globals.romdata[addr + i*4 + 1] = obj.c3;
-        Globals.romdata[addr + i*4 + 3] = obj.c4;
-        Globals.romdata[addr + count * 4 + i] = obj.typeColor;
+        Globals.romdata[addr + i*4 + 0] = (byte)obj.c1;
+        Globals.romdata[addr + i*4 + 2] = (byte)obj.c2;
+        Globals.romdata[addr + i*4 + 1] = (byte)obj.c3;
+        Globals.romdata[addr + i*4 + 3] = (byte)obj.c4;
+        Globals.romdata[addr + count * 4 + i] = (byte)obj.typeColor;
     }
   }
   
@@ -181,7 +181,7 @@ public class Data
   public BigBlock[] getBigBlocks(int bigTileIndex)
   {
     var data = Utils.readLinearBigBlockData(0, bigTileIndex, 8);
-    var bblocks = Utils.unlinearizeBigBlocks(data, 2, 4);
+    var bblocks = Utils.unlinearizeBigBlocks<BigBlock>(data, 2, 4);
     transposeBigBlocks(bblocks);
     return bblocks;
   }

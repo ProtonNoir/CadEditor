@@ -1,7 +1,7 @@
 -------------------------------------------------------------------------------
 [RUS]
 Редактор уровней для игр [NES/SEGA/SNES/GBA].
-Версия 3.8
+Версия 4.0
 -------------------------------------------------------------------------------
 Полный список поддерживаемых игр в файле cad_editor_supported_games.txt
 ------------------------------------------------------------------------------- 
@@ -347,6 +347,47 @@ v3.8
   Gun Smoke
   Little Samson
   Darkman
+  
+v3.9
+- Поддержка игр с битами палитры, заданными на уровне макроблоков (правой кнопкой в редакторе макроблоков меняются палитры). Примеры: 
+  Tiny Toon Adventures
+  Ninja Gaiden 3
+- Редактор дампов для Felix the Cat[NES] (уровни 1-1, 1-2, 1-3). Для сохранения дампа в РОМ потребуется компрессор.
+- Редактор блоков/макроблоков для Shatterhand [NES] (уровень 1). Автор: Proton
+- Редактор блоков/макроблоков для Rokin' Kats [NES] (все уровни).
+- Редактор стартового экрана Chip and Dale (через плагин редактора карты).
+- Конфиги экранов картинками (автор Roket) [NES]:
+  Addams Family: The Pugsley's Scavenger Hunt
+  Moon Crystal
+  Mappy Kids
+  Predator
+- Конфиги экранов картинками (автор DANGER X)
+  Mighty Final Fight
+  
+v4.0
+- Фикс бага с отсуствием скролл-бара при маленьких разрешениях экрана.
+- Поддержка маленьких блоков любого размера.
+- Редактор блоков для игр (по одному уровню)
+    Yo-Noid
+    Power Blade
+    Power Blade 2
+    Contra Force
+    Batman Returns
+    Alien 3
+    Adventures Island 2
+    Adventures Island 3
+    Super C
+    Jackie Chan Action Kung Fu
+    Battletoads
+    Battletoads & Double Dragon - The Ultimate Team
+    Monster in My Pocket
+    Bucky O'Hare
+    Jackal
+    Darkman
+    Teenage Mutant Ninja Turtles
+    Teenage Mutant Ninja Turtles 2
+    Teenage Mutant Ninja Turtles 3
+  
 
 -------------------------------------------------------------------------------
 Благодарности: 
@@ -361,10 +402,10 @@ v3.8
   Darthatron  - документация по Final Fantasy Tactics Advance, кодирование.
   cah4e3      - собрание огромной базы Unpublished cheats list для NES.
   Megaplex    - документация по игре EarthWorm Jim 2.
-  DANGER X    - конфиги для игры Banana Prince.
+  DANGER X    - конфиги для игры Banana Prince, Mighty Final Fight
   Ti_         - помощь с дизассеблированием, конфиги для игр Contra Force, Jungle Book, Little Nemo, Battletoads, Battletoads & Double Dragon, Shatterhand, Tom & Jerry, Ninja Cats.
   Alxr        - разбор формата уровней Rockin' Kats.
-  Proton      - финансовая поддержка.
+  Proton      - финансовая поддержка, конфиги для Shatterhand
   
 -------------------------------------------------------------------------------
 Обратная связь: 

@@ -19,11 +19,34 @@ public static class TinyToonUtils
   
   //--------------------------------------------------------------------------------------------------------------
   
+  private static byte getTTSmallBlocksColorByte(int index)
+  {
+      int btc = ConfigScript.getBigBlocksCount(0);
+      int addr = ConfigScript.getBigTilesAddr(0, 0);
+      return Globals.romdata[addr + btc * 4 + index];
+  }
+  
+    private static void setTTSmallBlocksColorByte(int index, byte colorByte)
+  {
+      int btc = ConfigScript.getBigBlocksCount(0);
+      int addr = ConfigScript.getBigTilesAddr(0, 0);
+      Globals.romdata[addr + btc * 4 + index] = colorByte;
+  }
+  
   public static BigBlock[] getBigBlocksTT(int bigTileIndex)
   {
     var bigBlocksAddr = ConfigScript.getBigTilesAddr(0, bigTileIndex);
     var data = Utils.readDataFromAlignedArrays(Globals.romdata, bigBlocksAddr, ConfigScript.getBigBlocksCount(0));
-    return Utils.unlinearizeBigBlocks(data, 2, 2);
+    var bb = Utils.unlinearizeBigBlocks<BigBlockWithPal>(data, 2, 2);
+    for (int i = 0; i < bb.Length; i++)
+    {
+      int palByte = getTTSmallBlocksColorByte(i);
+      bb[i].palBytes[0] = palByte >> 0 & 0x3;
+      bb[i].palBytes[1] = palByte >> 2 & 0x3;
+      bb[i].palBytes[2] = palByte >> 4 & 0x3;
+      bb[i].palBytes[3] = palByte >> 6 & 0x3;
+    }
+    return bb;
   }
   
   public static void setBigBlocksTT(int bigTileIndex, BigBlock[] bigBlockIndexes)
@@ -31,6 +54,13 @@ public static class TinyToonUtils
     var bigBlocksAddr = ConfigScript.getBigTilesAddr(0, bigTileIndex);
     var data = Utils.linearizeBigBlocks(bigBlockIndexes);
     Utils.writeDataToAlignedArrays(data, Globals.romdata, bigBlocksAddr, ConfigScript.getBigBlocksCount(0));
+    //save pal bytes
+    for (int i = 0; i < bigBlockIndexes.Length; i++)
+    {
+      var bb = bigBlockIndexes[i] as BigBlockWithPal;
+      int palByte = bb.palBytes[0] | bb.palBytes[1] << 2 | bb.palBytes[2]<<4 | bb.palBytes[3]<< 6;
+      setTTSmallBlocksColorByte(i, (byte)palByte);
+    }
   }
   
   static ObjRec[] readBlocksFromAlignedArraysTT(byte[] romdata, int addr, int count)
@@ -54,10 +84,10 @@ public static class TinyToonUtils
     for (int i = 0; i < count; i++)
     {
       var obj = objects[i];
-      romdata[addr + i] = obj.c1;
-      romdata[addr + count * 1 + i] = obj.c3;
-      romdata[addr + count * 2 + i] = obj.c2;
-      romdata[addr + count * 3 + i] = obj.c4;
+      romdata[addr + i] = (byte)obj.c1;
+      romdata[addr + count * 1 + i] = (byte)obj.c3;
+      romdata[addr + count * 2 + i] = (byte)obj.c2;
+      romdata[addr + count * 3 + i] = (byte)obj.c4;
     }
   }
   
