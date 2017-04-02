@@ -41,7 +41,6 @@ namespace CadEditor
             UtilsGui.setCbItemsCount(cbTileset, ConfigScript.blocksOffset.recCount);
             UtilsGui.setCbItemsCount(cbPalette, ConfigScript.palOffset.recCount);
 
-
             UtilsGui.setCbIndexWithoutUpdateLevel(cbTileset, cbLevelSelect_SelectedIndexChanged, formMain.CurActiveBigBlockNo);  //small blocks no?
             UtilsGui.setCbIndexWithoutUpdateLevel(cbVideo, VisibleOnlyChange_SelectedIndexChanged, formMain.CurActiveVideoNo - 0x90);
             UtilsGui.setCbIndexWithoutUpdateLevel(cbPalette, VisibleOnlyChange_SelectedIndexChanged, formMain.CurActivePalleteNo);
@@ -49,6 +48,9 @@ namespace CadEditor
             curActiveVideo = formMain.CurActiveVideoNo;
             curActivePal = formMain.CurActivePalleteNo;
             UtilsGui.setCbIndexWithoutUpdateLevel(cbSubpalette, cbSubpalette_SelectedIndexChanged);
+
+            UtilsGui.setCbItemsCount(cbPanelNo, (ConfigScript.getBlocksCount() + BLOCKS_PER_PAGE  - 1)/ BLOCKS_PER_PAGE);
+            UtilsGui.setCbIndexWithoutUpdateLevel(cbPanelNo, cbPanelNo_SelectedIndexChanged);
         }
 
         protected void reloadLevel(bool resetDirty = true)
@@ -145,6 +147,9 @@ namespace CadEditor
         protected int curSubpalIndex = 0;
         protected int curActiveBlock = 0;
 
+        protected int curPageIndex = 0;
+        private const int BLOCKS_PER_PAGE = 256;
+
         protected byte[] palette = new byte[Globals.PAL_LEN];
         protected ObjRec[] objects = new ObjRec[256];
         protected Bitmap[][] videoSprites = new Bitmap[4][];
@@ -189,8 +194,8 @@ namespace CadEditor
             int x = e.X / 16;
             int y = e.Y / 16;
             PictureBox p = (PictureBox)sender;
-            int objIndex = (int)p.Tag;
-            var obj = objects[objIndex];
+            int objIndex = curPageIndex * BLOCKS_PER_PAGE + (int)p.Tag;
+            var obj = objects[ objIndex];
             if (x >= 0 && x < obj.w && y>=0 && y < obj.h)
             {
                 if (left)
@@ -218,16 +223,16 @@ namespace CadEditor
         {
             ComboBox cb = (ComboBox)sender;
             PictureBox pb = (PictureBox)cb.Tag;
-            int index = (int)pb.Tag;
+            int index = curPageIndex * BLOCKS_PER_PAGE + (int)pb.Tag;
             objects[index].typeColor = (byte)(objects[index].typeColor & 0xF0 | cb.SelectedIndex);
-            pb.Image = makeObjImage((int)pb.Tag);
+            pb.Image = makeObjImage(index);
             dirty = true;
         }
 
         protected void cbType_SelectedIndexChanged(object sender, EventArgs e)
         {
             ComboBox cb = (ComboBox)sender;
-            int index = (int)cb.Tag;
+            int index = curPageIndex * BLOCKS_PER_PAGE + (int)cb.Tag;
             objects[index].typeColor = (byte)((objects[index].typeColor & 0x0F) | (cb.SelectedIndex << 4));
             dirty = true;
         }
@@ -314,7 +319,8 @@ namespace CadEditor
             //GUI
             mapObjects.Controls.Clear();
             mapObjects.SuspendLayout();
-            for (int i = 0; i < ConfigScript.getBlocksCount(); i++)
+            int endIndex = Math.Min(BLOCKS_PER_PAGE, ConfigScript.getBlocksCount());
+            for (int i = 0; i < endIndex; i++)
             {
                 var obj = objects[i];
                 int curPanelX = 0;
@@ -324,7 +330,7 @@ namespace CadEditor
                 //
                 Label lb = new Label();
                 lb.Location = new Point(curPanelX, 0);
-                lb.Size = new Size(24, 32);
+                lb.Size = new Size(32, 32);
                 lb.Tag = i;
                 lb.Text = String.Format("{0:X}",i);
                 fp.Controls.Add(lb);
@@ -373,9 +379,16 @@ namespace CadEditor
                 return;
             }
 
-            for (int i = 0; i < ConfigScript.getBlocksCount(); i++)
+            mapObjects.SuspendLayout();
+            int startIndex = curPageIndex * BLOCKS_PER_PAGE;
+            int endIndex = Math.Min(startIndex + BLOCKS_PER_PAGE, ConfigScript.getBlocksCount());
+            int pi = 0;
+            for (int i = startIndex; i < endIndex; i++, pi++)
             {
-                Panel p = (Panel)mapObjects.Controls[i];
+                Panel p = (Panel)mapObjects.Controls[pi];
+                p.Visible = true;
+                Label lb = (Label)p.Controls[0];
+                lb.Text = String.Format("{0:X}", i);
                 PictureBox pb = (PictureBox)p.Controls[1];
                 pb.Image = makeObjImage(i);
                 ComboBox cbColor = (ComboBox)p.Controls[2];
@@ -383,6 +396,12 @@ namespace CadEditor
                 ComboBox cbType = (ComboBox)p.Controls[3];
                 cbType.SelectedIndex = objects[i].getType();
             }
+            for (; pi < mapObjects.Controls.Count; pi++)
+            {
+                Panel p = (Panel)mapObjects.Controls[pi];
+                p.Visible = false;
+            }
+            mapObjects.ResumeLayout();
         }
 
         private void VisibleOnlyChange_SelectedIndexChanged(object sender, EventArgs e)
@@ -420,8 +439,7 @@ namespace CadEditor
                 videoChunk[beginIndex + line + 8] = Utils.ReverseBits(videoChunk[beginIndex + line + 8]); 
             }
             ConfigScript.setVideoChunk(getBackId(), videoChunk);
-            reloadLevel(false);
-            dirty = true;
+            cbLevelSelect_SelectedIndexChanged(sender, e);
         }
 
         protected void btFlipVertical_Click(object sender, EventArgs e)
@@ -438,8 +456,7 @@ namespace CadEditor
             Utils.Swap(ref videoChunk[beginIndex +10], ref videoChunk[beginIndex +13]);
             Utils.Swap(ref videoChunk[beginIndex +11], ref videoChunk[beginIndex +12]);
             ConfigScript.setVideoChunk(getBackId(), videoChunk);
-            reloadLevel(false);
-            dirty = true;
+            cbLevelSelect_SelectedIndexChanged(sender, e);
         }
 
         protected void btExport_Click(object sender, EventArgs e)
@@ -500,6 +517,12 @@ namespace CadEditor
         public void setFormMain(FormMain f)
         {
             formMain = f;
+        }
+
+        private void cbPanelNo_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            curPageIndex = cbPanelNo.SelectedIndex;
+            reloadLevel(false);
         }
     }
 }

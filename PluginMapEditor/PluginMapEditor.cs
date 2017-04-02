@@ -9,8 +9,8 @@ using CSScriptLibrary;
 
 namespace PluginMapEditor
 {
-    public delegate int SaveMapFunc(byte[] mapData, out byte[] packedData);
-    public delegate byte[] LoadMapFunc(int romAddr);
+    public delegate int SaveMapFunc(int mapNo, byte[] mapData, out byte[] packedData);
+    public delegate byte[] LoadMapFunc(int mapNo);
 
     public class PluginMapEditor : IPlugin
     {
@@ -44,6 +44,8 @@ namespace PluginMapEditor
             MapConfig.mapsInfo = (MapInfo[])asm.InvokeInst(data, "*.getMapsInfo");
             MapConfig.loadMapFunc = (LoadMapFunc)asm.InvokeInst(data, "*.getLoadMapFunc");
             MapConfig.saveMapFunc = (SaveMapFunc)asm.InvokeInst(data, "*.getSaveMapFunc");
+            MapConfig.readOnly = ConfigScript.callFromScript(asm, data, "*.isMapReadOnly", false);
+            MapConfig.sharedPal = ConfigScript.callFromScript(asm, data, "*.mapEditorSharePallete", false);
         }
 
         FormMain formMain;
@@ -54,6 +56,7 @@ namespace PluginMapEditor
         public int dataAddr;
         public int palAddr;
         public int videoNo;
+        public int attribsAddr; //for separate attrib layer games
     }
 
     public static class MapConfig
@@ -61,15 +64,17 @@ namespace PluginMapEditor
         public static MapInfo[] mapsInfo;
         public static LoadMapFunc loadMapFunc;
         public static SaveMapFunc saveMapFunc;
+        public static bool readOnly;
+        public static bool sharedPal;
 
-        public static byte[] loadMap(int romAddr)
+        public static byte[] loadMap(int mapNo)
         {
-            return loadMapFunc(romAddr);
+            return loadMapFunc(mapNo);
         }
 
-        public static int saveMap(byte[] mapData, out byte[] packedData)
+        public static int saveMap(int mapNo, byte[] mapData, out byte[] packedData)
         {
-            return saveMapFunc(mapData, out packedData);
+            return saveMapFunc(mapNo, mapData, out packedData);
         }
     }
 }

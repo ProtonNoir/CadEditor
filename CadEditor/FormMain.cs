@@ -18,6 +18,7 @@ namespace CadEditor
 
         private void Form1_Load(object sender, EventArgs e)
         {
+            this.KeyPreview = true;
             if (OpenFile.FileName == "" || OpenFile.ConfigName == "")
             {
                 if (!openFile())
@@ -34,7 +35,7 @@ namespace CadEditor
             }
 
             subeditorsDict = new Dictionary<ToolStripButton, Func<Form>> { 
-                 { bttBigBlocks,    makeBigBlocksEditor },
+                 { bttBigBlocks,    ()=>{ var f = new BigBlockEdit();  f.setFormMain(this); return f;} },
                  { bttBlocks,       makeBlocksEditor },
                  { bttEnemies,      ()=>{ var f = new EnemyEditor();  f.setFormMain(this); return f;}  },
                  { bttConfig,       ()=>{ var f = new FormConfig();  f.setFormMain(this); f.onApply += reloadCallback; return f;}    },
@@ -45,13 +46,6 @@ namespace CadEditor
 
             splitContainer1.Width = this.Width - 21;
             splitContainer1.Height = this.Height - 81;
-        }
-
-        private Form makeBigBlocksEditor()
-        {
-            BigBlockEdit f = new BigBlockEdit();
-            f.setFormMain(this);
-            return f;
         }
 
         private Form makeBlocksEditor()
@@ -96,8 +90,9 @@ namespace CadEditor
         private void resetControls()
         {
             curActiveLevelForScreen = 0;
-            UtilsGui.setCbItemsCount(cbPanelNo, (ConfigScript.getBigBlocksCount(ConfigScript.getbigBlocksHierarchyCount()-1)+1023) / 1024);
-            cbPanelNo.SelectedIndex = 0;
+            UtilsGui.setCbItemsCount(cbPanelNo, (ConfigScript.getBigBlocksCount(ConfigScript.getbigBlocksHierarchyCount()-1)+BLOCKS_PER_PAGE-1) / BLOCKS_PER_PAGE);
+            UtilsGui.setCbIndexWithoutUpdateLevel(cbPanelNo, cbPanelNo_SelectedIndexChanged);
+            //cbPanelNo.SelectedIndex = 0;
             resetScreens();
 
             UtilsGui.setCbItemsCount(cbVideoNo, ConfigScript.videoOffset.recCount);
@@ -117,8 +112,6 @@ namespace CadEditor
             {
                 cbGroup.Items.Add(g.name);
             }
-            /*if (cbGroup.Items.Count > 0)
-              UtilsGui.setCbIndexWithoutUpdateLevel(cbGroup, cbGroup_SelectedIndexChanged);*/
             dirty = false; updateSaveVisibility();
             showNeiScreens = true;
             showAxis = true;
@@ -217,12 +210,6 @@ namespace CadEditor
             bigBlocks.Images.Clear();
             bigBlocks.ImageSize = new Size((int)(curButtonScale * blockWidth), (int)(curButtonScale * blockHeight));
             bigBlocks.Images.AddRange(bigImages);
-
-            //tt add
-            for (int i = ConfigScript.getBigBlocksCount(ConfigScript.getbigBlocksHierarchyCount()-1); i < 256; i++)
-            {
-                bigBlocks.Images.Add(VideoHelper.emptyScreen((int)(blockWidth*curButtonScale),(int)(blockHeight*curButtonScale)));
-            }
             curActiveBlock = 0;
 
             if (needToRefillBlockPanel)
@@ -234,39 +221,17 @@ namespace CadEditor
         private void prepareBlocksPanel()
         {
             int lastHierarchy = ConfigScript.getbigBlocksHierarchyCount() - 1;
-            int subparts = (ConfigScript.getBigBlocksCount(lastHierarchy) +1023) / 1024;
-            FlowLayoutPanel[] blocksPanels = { blocksPanel, blockPanel2, blockPanel3, blockPanel4 };
-            if (ConfigScript.getBigBlocksCount(lastHierarchy) < 1024)
-            {
-                UtilsGui.prepareBlocksPanel(blocksPanels[0], new Size((int)(blockWidth * curButtonScale + 1), (int)(blockHeight * curButtonScale + 1)), bigBlocks, buttonBlockClick, 0, ConfigScript.getBigBlocksCount(lastHierarchy));
-            }
-            else
-            {
-                for (int i = 0; i < subparts; i++)
-                {
-                    int count = (i * 1024 > ConfigScript.getBigBlocksCount(lastHierarchy)) ? (i * 1024) % ConfigScript.getBigBlocksCount(lastHierarchy) : 1024;
-                    UtilsGui.prepareBlocksPanel(blocksPanels[i], new Size((int)(blockWidth * curButtonScale + 1), (int)(blockHeight * curButtonScale + 1)), bigBlocks, buttonBlockClick, i * 1024, count);
-                }
-            }
+            int subparts = (ConfigScript.getBigBlocksCount(lastHierarchy) +BLOCKS_PER_PAGE-1) / BLOCKS_PER_PAGE;
+            int count = (curBlocksPage * BLOCKS_PER_PAGE > ConfigScript.getBigBlocksCount(lastHierarchy)) ? (curBlocksPage * BLOCKS_PER_PAGE) % ConfigScript.getBigBlocksCount(lastHierarchy) : BLOCKS_PER_PAGE;
+            UtilsGui.prepareBlocksPanel(blocksPanel, new Size((int)(blockWidth * curButtonScale + 1), (int)(blockHeight * curButtonScale + 1)), bigBlocks, buttonBlockClick, curBlocksPage * BLOCKS_PER_PAGE, count);
         }
 
         private void reloadBlocksPanel()
         {
-             int lastHierarchy = ConfigScript.getbigBlocksHierarchyCount() - 1;
-             int subparts = (ConfigScript.getBigBlocksCount(lastHierarchy) + 1023) / 1024;
-             FlowLayoutPanel[] blocksPanels = { blocksPanel, blockPanel2, blockPanel3, blockPanel4 };
-             if (ConfigScript.getBigBlocksCount(lastHierarchy) < 1024)
-             {
-                UtilsGui.reloadBlocksPanel(blocksPanels[0], bigBlocks, 0, ConfigScript.getBigBlocksCount(lastHierarchy));
-             }
-             else
-             {
-                 for (int i = 0; i < subparts; i++)
-                 {
-                     int count = (i * 1024 > ConfigScript.getBigBlocksCount(lastHierarchy)) ? (i * 1024) % ConfigScript.getBigBlocksCount(lastHierarchy) : 1024;
-                    UtilsGui.reloadBlocksPanel(blocksPanels[i], bigBlocks, i * 1024, count);
-                 }
-             }
+            int lastHierarchy = ConfigScript.getbigBlocksHierarchyCount() - 1;
+            int subparts = (ConfigScript.getBigBlocksCount(lastHierarchy) + BLOCKS_PER_PAGE-1) / BLOCKS_PER_PAGE;
+            int count = ((curBlocksPage+1) * BLOCKS_PER_PAGE > ConfigScript.getBigBlocksCount(lastHierarchy)) ? ConfigScript.getBigBlocksCount(lastHierarchy)% BLOCKS_PER_PAGE : BLOCKS_PER_PAGE;
+            UtilsGui.reloadBlocksPanel(blocksPanel, bigBlocks, curBlocksPage * BLOCKS_PER_PAGE, count);
         }
 
 
@@ -423,6 +388,9 @@ namespace CadEditor
         int curDy = OUTSIDE;
         bool curClicked = false;
         int curActiveLayer = 0;
+
+        private int curBlocksPage = 0;
+        const int BLOCKS_PER_PAGE = 256;
 
         //select rect if alt pressed
         private int selectionBeginX, selectionBeginY, selectionEndX, selectionEndY;
@@ -735,13 +703,11 @@ namespace CadEditor
         {
             showAxis = bttAxis.Checked;
             reloadLevel(false);
-            //mapScreen.Invalidate();
         }
 
         private void bttShowBrush_CheckedChanged(object sender, EventArgs e)
         {
             showBrush = bttShowBrush.Checked;
-            //reloadLevel(false);
         }
 
         private FormClosedEventHandler subeditorClosed(ToolStripButton enabledAfterCloseButton)
@@ -901,9 +867,6 @@ namespace CadEditor
                     selectionEndY ^= selectionBeginY;
                     selectionBeginY ^= selectionEndY;
                 }
-                /*var f = new FormStructures();
-                f.setFormMain(this);
-                f.Show();*/
                 int deltaX = selectionEndX - selectionBeginX + 1;
                 int deltaY = selectionEndY - selectionBeginY + 1;
                 int [][] tiles = new int[deltaY][];
@@ -1026,12 +989,30 @@ namespace CadEditor
             pnAdvancedParams.Visible = cbAdvanced.Checked;
         }
 
+        private void FormMain_KeyDown(object sender, KeyEventArgs e)
+        {
+            /*
+            //useful for config debugging
+            if (e.KeyCode == Keys.Q)
+            {
+                ConfigScript.palBytesAddr += 16;
+                lbPalBytesAddr.Text = String.Format("PalBytesAddr:{0:X}", ConfigScript.palBytesAddr);
+                reloadLevel(true, true);
+                mapScreen.Invalidate();
+            }
+            else if (e.KeyCode == Keys.W)
+            {
+                ConfigScript.palBytesAddr -= 16;
+                lbPalBytesAddr.Text = String.Format("PalBytesAddr:{0:X}", ConfigScript.palBytesAddr);
+                reloadLevel(true, true);
+                mapScreen.Invalidate();
+            }*/
+        }
+
         private void cbPanelNo_SelectedIndexChanged(object sender, EventArgs e)
         {
-            FlowLayoutPanel[] blocksPanels = { blocksPanel, blockPanel2, blockPanel3, blockPanel4 };
-            int index = cbPanelNo.SelectedIndex;
-            for (int i = 0; i < blocksPanels.Length; i++)
-                blocksPanels[i].Visible = i == index;
+            curBlocksPage = cbPanelNo.SelectedIndex;
+            reloadBlocksPanel();
         }
 
         public void addSubeditorButton(ToolStripItem item)
@@ -1075,14 +1056,7 @@ namespace CadEditor
 
         private void tbbShowInfo_Click(object sender, EventArgs e)
         {
-            var sb = new StringBuilder();
-            sb.Append("CadEditor\n\n");
-            sb.Append("Level editor for NES, SEGA, GBA games\n");
-            sb.Append("(You need original ROMs for editing it)\n\n");
-            sb.Append("Author: spiiin (sanya.boyko@gmail.com)\n\n");
-            sb.Append("Project support: R122299008919\n");
-            sb.Append("(It's really important for project development)\n");
-            MessageBox.Show(sb.ToString());
+            new About().ShowDialog();
         }
     }
 }

@@ -20,7 +20,7 @@ namespace CadEditor
 
         private void reloadAllData()
         {
-            mapData = MapConfig.loadMap(curActiveDataAddr);
+            mapData = MapConfig.loadMap(curActiveMapNo);
             setPal();
             byte videoPageId = (byte)(curActiveVideo + 0x90);
             videos = new ImageList[4];
@@ -45,17 +45,29 @@ namespace CadEditor
 
         private void setPal()
         {
-            curPal = new byte[16];
-            for (int i = 0; i < 16; i++)
-                curPal[i] = Globals.romdata[curActivePalAddr + i];
-            curPal[0] = curPal[4] = curPal[8] = curPal[12] = 0x0F;
+            if (MapConfig.sharedPal)
+            {
+                curPal = ConfigScript.getPal(0);
+            }
+            else
+            {
+                int palAddr = MapConfig.mapsInfo[curActiveMapNo].palAddr;
+                curPal = new byte[16];
+                for (int i = 0; i < 16; i++)
+                    curPal[i] = Globals.romdata[palAddr + i];
+                curPal[0] = curPal[4] = curPal[8] = curPal[12] = 0x0F;
+            }
         }
 
         private void saveMap()
         {
             byte[] x;
-            int nn = MapConfig.saveMap(mapData, out x);
+            int nn = MapConfig.saveMap(curActiveMapNo, mapData, out x);
 
+            if (MapConfig.readOnly)
+            {
+                return;
+            }
             //
             try
             {
@@ -95,8 +107,7 @@ namespace CadEditor
         }
 
         byte[] curPal;
-        int curActiveDataAddr = 0;
-        int curActivePalAddr = 0;
+        int curActiveMapNo = 0;
         int curActiveVideo = 10;
         int curActiveBlock = 0;
         ImageList[] videos;
@@ -131,7 +142,10 @@ namespace CadEditor
             int y = e.Y / 16;
             if (e.Button == System.Windows.Forms.MouseButtons.Left)
             {
-                mapData[y * 32 + x] = (byte)curActiveBlock;
+                if (!MapConfig.readOnly)
+                {
+                    mapData[y * 32 + x] = (byte)curActiveBlock;
+                }
             }
             else
             {
@@ -161,9 +175,8 @@ namespace CadEditor
         private void cbVideoNo_SelectedIndexChanged(object sender, EventArgs e)
         {
             MapInfo si = MapConfig.mapsInfo[cbScreenNo.SelectedIndex];
+            curActiveMapNo = cbScreenNo.SelectedIndex;
             curActiveVideo = si.videoNo;
-            curActiveDataAddr = si.dataAddr;
-            curActivePalAddr = si.palAddr;
             reloadAllData();
         }
     }
