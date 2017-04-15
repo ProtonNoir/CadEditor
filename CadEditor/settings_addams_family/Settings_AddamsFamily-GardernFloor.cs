@@ -11,7 +11,7 @@ public class Data
       "PluginMapEditor.dll",
     };
   }
-  public OffsetRec getScreensOffset()  { return new OffsetRec(0xC0A8, 1 , 256);   }
+  public OffsetRec getScreensOffset()  { return new OffsetRec(0xcb06, 1 , 256);   }
   public int getScreenWidth()          { return 256; }
   public int getScreenHeight()         { return 1; }
   public bool isBuildScreenFromSmallBlocks() { return true; }
@@ -29,22 +29,23 @@ public class Data
   public bool isBlockEditorEnabled()    { return true; }
   public bool isEnemyEditorEnabled()    { return false; }
   
-  public OffsetRec getBlocksOffset()    { return new OffsetRec(0xC282 , 1  , 0x1000);  }
+  public OffsetRec getBlocksOffset()    { return new OffsetRec(0xCC34 , 1  , 0x1000);  }
   public int getBlocksCount()           { return 128; }
   public int getBigBlocksCount()        { return 128; }
   
-  public GetBlocksFunc        getBlocksFunc() { return getBlocksLinear1x20withoutAttrib;}
+  public GetBlocksFunc        getBlocksFunc() { return getBlocksLinear1x6withoutAttrib;}
   public SetBlocksFunc        setBlocksFunc() { return Utils.setBlocksLinearWithoutAttrib;}
-  public int getPalBytesAddr()          { return 0xCCCC; }
+  //in fact, there is one attribs array, for background and floor, but it's impossible to describe blocks of different types in one config
+  public int getPalBytesAddr()          { return 0xCCCC + 64*5; } 
   
   //-------------------------------------------------------------------------------------------------------------------
-  public static ObjRec[] getBlocksLinear1x20withoutAttrib(int blockIndex)
+  public static ObjRec[] getBlocksLinear1x6withoutAttrib(int blockIndex)
   {
-      return Utils.readBlocksLinear(Globals.romdata, ConfigScript.getTilesAddr(blockIndex), 1, 20, ConfigScript.getBlocksCount(), false);
+      return Utils.readBlocksLinear(Globals.romdata, ConfigScript.getTilesAddr(blockIndex), 1, 6, ConfigScript.getBlocksCount(), false);
   }
   
   public MapInfo[] getMapsInfo() { return getMaps(); }
-  public LoadMapFunc getLoadMapFunc() { return MapUtils.loadMapAddamsFamily; }
+  public LoadMapFunc getLoadMapFunc() { return MapUtils.loadMapAddamsFamilyFloor; }
   public SaveMapFunc getSaveMapFunc() { return MapUtils.saveAttribs; }
   public bool isMapReadOnly()         { return true; }
 
